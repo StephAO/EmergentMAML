@@ -1,6 +1,7 @@
 from Agents.receiver_agent import ReceiverAgent
 from Agents.sender_agent import SenderAgent
 import data_handler as dh
+import numpy as np
 
 
 class Referential_Game:
@@ -14,7 +15,7 @@ class Referential_Game:
         Distractor Set Size [Int]
     """
 
-    def __init__(self, K=100, D=2):
+    def __init__(self, K=5, D=1):
         """
 
         :param sender: sender in game
@@ -22,8 +23,11 @@ class Referential_Game:
         :param K [Int]: Vocabulary Size
         :param D [Int]: Distractor Set Size
         """
-        self.sender = SenderAgent()
-        self.receiver = ReceiverAgent(self.sender.get_output(), self.sender.target_image)
+        self.sender = SenderAgent(K, D)
+        recv_msg, hum_msg, msg_len = self.sender.get_output()
+        self.receiver = ReceiverAgent(K, D, recv_msg, hum_msg, msg_len)
+        self.dh = dh.Data_Handler()
+        self.batch_size = self.sender.batch_size
         self.K = K # Vocabulary Size
         self.D = D # Distractor Set Size
 
@@ -33,7 +37,22 @@ class Referential_Game:
         Play a single instance of the game
         :return: None
         """
-        images = dh.get_images()
-        target_image, distractors = images[0], images[1:]
+        images = self.dh.get_images(imgs_per_batch=self.D + 1, num_batches=self.batch_size)
+        target_indices = np.random.randint(self.D + 1, size=self.batch_size)
 
-        message, prediction, loss = self.receiver.run_game(target_image, distractors)
+        target_images = np.zeros(self.sender.batch_shape)
+        for i, ti in enumerate(target_indices):
+            target_images[i] = images[ti][i]
+
+        fd = {}
+        self.sender.fill_feed_dict(fd, target_images)
+        self.receiver.fill_feed_dict(fd, images, target_indices)
+
+        message, prediction, loss, e = self.receiver.run_game(fd)
+        # print(message.shape, prediction)
+        print("-",target_indices[:3])
+        print("+",message[:3])
+
+        accuracy = np.sum(prediction==target_indices) / np.float(self.batch_size)
+
+        return loss, accuracy
