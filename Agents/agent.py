@@ -4,16 +4,16 @@ import tensorflow as tf
 
 class Agent:
 
-    pre_trained = tf.keras.applications.xception.Xception(include_top=False, weights='imagenet', pooling='max',
-                                                          input_shape=(img_h, img_w, 3))
+    # pre_trained = tf.keras.applications.xception.Xception(include_top=False, weights='imagenet', pooling='max',
+    #                                                       input_shape=(img_h, img_w, 3))
     def __init__(self, vocab_size, num_distractors):
         self.num_hidden = 256
-        self.batch_size = 8
+        self.batch_size = 64
         self.batch_shape = (self.batch_size, img_h, img_w, 3)
         self.K = vocab_size
         self.D = num_distractors
         self.max_len = tf.constant(15) # maximum message length
-        self.lr = 0.01
+        self.lr = 0.001
         self.gradient_clip = 10.0
         # TODO: properly define start/end tokens
         # Currently setting start token to [1, 0, 0, ...., 0]

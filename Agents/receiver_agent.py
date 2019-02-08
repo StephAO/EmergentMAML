@@ -45,10 +45,18 @@ class ReceiverAgent(Agent):
                                          kernel_initializer=tf.glorot_uniform_initializer)
 
         for d in range(self.D + 1):
-            can = tf.placeholder(tf.float32, shape=(self.batch_size, img_h, img_w, 3))
-            self.candidates.append(can)
-            img_feat = Agent.pre_trained(can)
+            # can = tf.placeholder(tf.float32, shape=(self.batch_size, img_h, img_w, 3))
+            # self.candidates.append(can)
+            # img_feat = Agent.pre_trained(can)
+            # img_feat = self.img_trans(img_feat)
+
+            ### TEST
+            idx = tf.fill([self.batch_size], d)
+            img_feat = tf.one_hot(idx, self.K)
             img_feat = self.img_trans(img_feat)
+            ####
+
+
             self.image_features.append(img_feat)
 
             self.energies.append(tf.reduce_sum(tf.multiply(img_feat, self.rnn_features), axis=1))
@@ -82,7 +90,7 @@ class ReceiverAgent(Agent):
     def _build_optimizer(self):
         self.train_op = tf.contrib.layers.optimize_loss(
             loss=self.loss,
-            global_step=tf.train.get_or_create_global_step(), # TODO define
+            global_step=tf.train.get_or_create_global_step(),
             learning_rate=self.lr,
             optimizer="Adam",
             # some gradient clipping stabilizes training in the beginning.
@@ -91,8 +99,8 @@ class ReceiverAgent(Agent):
 
     def fill_feed_dict(self, fd, candidates, target_idx):
         fd[self.target_indices] = target_idx
-        for i, c in enumerate(candidates):
-            fd[self.candidates[i]] = c
+        # for i, c in enumerate(candidates):
+        #     fd[self.candidates[i]] = c
 
     def close(self):
         self.sess.close()

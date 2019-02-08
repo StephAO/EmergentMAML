@@ -8,7 +8,7 @@ class SenderAgent(Agent):
     def __init__(self, vocab_size, num_distractors):
         self.num_fc_hidden = 128
         # TODO define temperature better - maybe learnt temperature?
-        self.temperature = 0.2
+        self.temperature = 5.
         self.L = 1 # Maximum number of iterations
         super().__init__(vocab_size, num_distractors)
 
@@ -21,8 +21,14 @@ class SenderAgent(Agent):
         :return:
         """
         # Determines starting state
-        self.target_image = tf.placeholder(tf.float32, shape=(self.batch_size, img_h, img_w, 3))
-        img_feat = Agent.pre_trained(self.target_image)
+        # self.target_image = tf.placeholder(tf.float32, shape=(self.batch_size, img_h, img_w, 3))
+        # img_feat = Agent.pre_trained(self.target_image)
+
+        ### TEST
+        self.target_image = tf.placeholder(tf.int32, shape=(self.batch_size))
+        img_feat = tf.one_hot(self.target_image, self.K)
+        ###
+
         self.fc = tf.layers.Dense(self.num_hidden, activation=tf.nn.relu,
                                   kernel_initializer=tf.glorot_uniform_initializer)
         self.s0 = self.fc(img_feat)

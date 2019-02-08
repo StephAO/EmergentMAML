@@ -15,7 +15,7 @@ class Referential_Game:
         Distractor Set Size [Int]
     """
 
-    def __init__(self, K=5, D=1):
+    def __init__(self, K=500, D=500):
         """
 
         :param sender: sender in game
@@ -26,7 +26,7 @@ class Referential_Game:
         self.sender = SenderAgent(K, D)
         recv_msg, hum_msg, msg_len = self.sender.get_output()
         self.receiver = ReceiverAgent(K, D, recv_msg, hum_msg, msg_len)
-        self.dh = dh.Data_Handler()
+        # self.dh = dh.Data_Handler()
         self.batch_size = self.sender.batch_size
         self.K = K # Vocabulary Size
         self.D = D # Distractor Set Size
@@ -37,21 +37,21 @@ class Referential_Game:
         Play a single instance of the game
         :return: None
         """
-        images = self.dh.get_images(imgs_per_batch=self.D + 1, num_batches=self.batch_size)
+        # images = self.dh.get_images(imgs_per_batch=self.D + 1, num_batches=self.batch_size)
         target_indices = np.random.randint(self.D + 1, size=self.batch_size)
 
-        target_images = np.zeros(self.sender.batch_shape)
-        for i, ti in enumerate(target_indices):
-            target_images[i] = images[ti][i]
+        # target_images = np.zeros(self.sender.batch_shape)
+        # for i, ti in enumerate(target_indices):
+        #     target_images[i] = images[ti][i]
 
         fd = {}
-        self.sender.fill_feed_dict(fd, target_images)
-        self.receiver.fill_feed_dict(fd, images, target_indices)
+        self.sender.fill_feed_dict(fd, target_indices)
+        self.receiver.fill_feed_dict(fd, [], target_indices)
 
         message, prediction, loss, e = self.receiver.run_game(fd)
         # print(message.shape, prediction)
-        print("-",target_indices[:3])
-        print("+",message[:3])
+        # print("-",target_indices[:3])
+        # print("+",message[:3])
 
         accuracy = np.sum(prediction==target_indices) / np.float(self.batch_size)
 
