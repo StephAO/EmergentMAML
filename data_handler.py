@@ -3,12 +3,12 @@ import matplotlib.pyplot as plt
 from pycocotools.coco import COCO
 from skimage import io, transform
 
-img_h = 100
-img_w = 100
+img_h = 96
+img_w = 96
 
 class Data_Handler:
 
-    def __init__(self):
+    def __init__(self, dataset=None):
         self.data_dir = '/home/stephane/cocoapi'
         self.dataType = 'train2014'
         self.data_file = '{}/annotations/instances_{}.json'.format(self.data_dir, self.dataType)
@@ -39,20 +39,24 @@ class Data_Handler:
                 # catId = self.coco.getCatIds(catNms=[cat["name"]])
                 imgIds = self.coco.getImgIds(catIds=cat)#["id"])
                 # Testing using same two images. Commented code is used for random image (harder but that's the goal)
-                img = self.coco.loadImgs(imgIds[i])[0]#imgIds[np.random.randint(0, len(imgIds))])[0]
+                img = self.coco.loadImgs(imgIds[0])[0]#imgIds[np.random.randint(0, len(imgIds))])[0]
                 img = io.imread('{}/images/{}/{}'.format(self.data_dir, self.dataType, img['file_name']))
 
 
+                # Ignore images that don't have 3 channels
                 while img.shape[-1] != 3:
                     print("bw_image", img.shape)
 
-                    # plt.axis('off')
-                    # plt.imshow(img)
-                    # plt.show()
                     img = self.coco.loadImgs(imgIds[np.random.randint(0, len(imgIds))])[0]
                     img = io.imread('{}/images/{}/{}'.format(self.data_dir, self.dataType, img['file_name']))
 
                 img = transform.resize(img, (img_h, img_w), anti_aliasing=True, mode='reflect')
+
+                # Making the problem easier to debug
+                if i == 1:
+                    img = np.zeros((img_h, img_w, 3), dtype=np.float32)
+                else:
+                    img = np.ones((img_h, img_w, 3), dtype=np.float32)
 
                 # plt.axis('off')
                 # plt.imshow(img)

@@ -5,12 +5,12 @@ import tensorflow_probability as tfp
 
 class SenderAgent(Agent):
 
-    def __init__(self, vocab_size, num_distractors):
-        self.num_fc_hidden = 128
+    def __init__(self, vocab_size, num_distractors, use_images):
+        self.num_fc_hidden = 256
         # TODO define temperature better - maybe learnt temperature?
         self.temperature = 5.
-        self.L = 1 # Maximum number of iterations
-        super().__init__(vocab_size, num_distractors)
+
+        super().__init__(vocab_size, num_distractors, use_images=use_images)
 
     def _build_input(self):
         """
@@ -20,23 +20,23 @@ class SenderAgent(Agent):
             - First input is a start of sentence token (sos), followed by the output of the previous timestep
         :return:
         """
-        # Determines starting state
-        # self.target_image = tf.placeholder(tf.float32, shape=(self.batch_size, img_h, img_w, 3))
-        # img_feat = Agent.pre_trained(self.target_image)
+        if self.use_images:
+            # Determines starting state
+            self.target_image = tf.placeholder(tf.float32, shape=(self.batch_size, img_h, img_w, 3))
+            img_feat = Agent.pre_trained(self.target_image)
 
-        ### TEST
-        self.target_image = tf.placeholder(tf.int32, shape=(self.batch_size))
-        img_feat = tf.one_hot(self.target_image, self.K)
-        ###
+        else: # Use one-hot encoding
+            self.target_image = tf.placeholder(tf.int32, shape=(self.batch_size))
+            img_feat = tf.one_hot(self.target_image, self.K)
 
         self.fc = tf.layers.Dense(self.num_hidden, activation=tf.nn.relu,
                                   kernel_initializer=tf.glorot_uniform_initializer)
         self.s0 = self.fc(img_feat)
-        self.fc_weights_avg = tf.reduce_max(self.fc.weights[0])
         # weights = tf.get_default_graph().get_tensor_by_name(os.path.split(x.name)[0] + '/kernel:0'))
 
         self.starting_tokens = tf.stack([self.sos_token] * self.batch_size)
         # Determines input to decoder at next time step
+        # TODO: define a end_fn that actually has a chance of triggering so that we can variable len messages
         self.helper = tf.contrib.seq2seq.InferenceHelper(sample_fn=lambda outputs: outputs,
                                                          sample_shape=[self.K],
                                                          sample_dtype=tf.float32,
@@ -61,6 +61,10 @@ class SenderAgent(Agent):
 
         # self.final_features = tf.layers.dense(self.output, self.num_fc_hidden, activation=tf.nn.relu)
         # self.logits = tf.layers.dense(self.final_features, self.vocab_size, activation=None)
+
+        # Annealing temperature
+        # self.temperature = tf.clip_by_value(10000. / tf.cast(self.epoch, tf.float32), 0.5, 10.)
+
         self.dist = tfp.distributions.RelaxedOneHotCategorical(self.temperature, logits=self.rnn_outputs)
         self.output = self.dist.sample()
         self.output_symbol = tf.argmax(self.output, axis=2)

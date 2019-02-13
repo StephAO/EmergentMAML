@@ -1,21 +1,32 @@
 import matplotlib.pyplot as plt
+import numpy as np
 from Tasks import referential_game
 
 def main():
+    """
+    Run epochs of games
+    :return:
+    """
     epochs = 10000
     rg = referential_game.Referential_Game()
     losses = []
     accuracies = []
-    for e in range(epochs):
-        loss, acc = rg.play_game()
-        if (e + 1) % 10 == 0:
-            print(loss, acc)
+    for e in range(1, epochs):
+        loss, acc = rg.play_game(e)
+        if (e) % 20 == 0:
+            print(loss, np.mean(accuracies[-20:]))
         losses.append(loss)
         accuracies.append(acc)
 
+        # if np.mean(accuracies[-20:]) == 1.0:
+            # break
+
+    print("--- EPOCH {0:5d} ---".format(e))
     ml = max(losses)
-    losses = [l / ml for l in losses]
-    plt.plot(losses, 'r', accuracies, 'g')
+    losses_ = [l / ml for l in losses]
+    accuracies_ = [np.mean(accuracies[i: i + 10]) for i in range(len(accuracies) - 10)]
+
+    plt.plot(losses_, 'r', accuracies_, 'g')  # , lrs, 'b')
     plt.show()
 
 
