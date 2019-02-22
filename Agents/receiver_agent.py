@@ -71,16 +71,21 @@ class ReceiverAgent(Agent):
                 idx = tf.fill([self.batch_size], d)
                 img_feat = tf.one_hot(idx, self.K)
                 img_feat = self.img_trans(img_feat)
-
+                
+            # [Q]: how is this adding noise to the image features
+            
             # Try adding noise to img_feat and rnn_feat
             self.image_features.append(img_feat)
-            self.img_feat_1.append(img_feat_1)
+            
+            # [Q] not sure what this is used for and it throws an error when run with debug_images set to false
+            # self.img_feat_1.append(img_feat_1)
 
             if self.loss_type == "pairwise":
                 self.energies.append(cosine_similarity(self.rnn_features, img_feat, axis=1))
-            elif self.loss_type == "MSE":
-                e = tf.negative(tf.reduce_sum(tf.pow(tf.abs(tf.subtract(self.rnn_features, img_feat) + 1e-8), 0.5), axis=1))
+            elif self.loss_type == "MSE":                
+                e = tf.reduce_mean(tf.squared_difference(self.rnn_features, img_feat), axis=1)
                 self.energies.append(e)
+                
             elif self.loss_type == "invMSE":
                 e = tf.reduce_sum(tf.divide(1., tf.pow(tf.subtract(self.rnn_features, img_feat), 2) + 1e-8), axis=1)
                 self.energies.append(e)
@@ -95,6 +100,9 @@ class ReceiverAgent(Agent):
         self.output = tf.argmax(self.prob_dist, axis=1)
 
     def _build_losses(self):
+        
+        print("Loss type", self.loss_type)
+        
         # See https://arxiv.org/abs/1710.06922 Appendix A for discussion on losses
         # Currently only pairwise is having any success
         self.target_indices = tf.placeholder(tf.int32, shape=[self.batch_size])
