@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from pycocotools.coco import COCO
 from skimage import io, transform
 
+# TODO: consider moving this to a better spot
 img_h = 96
 img_w = 96
 
@@ -39,24 +40,17 @@ class Data_Handler:
                 # catId = self.coco.getCatIds(catNms=[cat["name"]])
                 imgIds = self.coco.getImgIds(catIds=cat)#["id"])
                 # Testing using same two images. Commented code is used for random image (harder but that's the goal)
-                img = self.coco.loadImgs(imgIds[0])[0]#imgIds[np.random.randint(0, len(imgIds))])[0]
+                img = self.coco.loadImgs(imgIds[np.random.randint(0, len(imgIds))])[0]
                 img = io.imread('{}/images/{}/{}'.format(self.data_dir, self.dataType, img['file_name']))
 
 
                 # Ignore images that don't have 3 channels
+                # TODO: consider making bw images 3 channels to make them useable
                 while img.shape[-1] != 3:
-                    print("bw_image", img.shape)
-
                     img = self.coco.loadImgs(imgIds[np.random.randint(0, len(imgIds))])[0]
                     img = io.imread('{}/images/{}/{}'.format(self.data_dir, self.dataType, img['file_name']))
 
                 img = transform.resize(img, (img_h, img_w), anti_aliasing=True, mode='reflect')
-
-                # Making the problem easier to debug
-                # if i == 0:
-                #     img = np.zeros((img_h, img_w, 3), dtype=np.float32)
-                # else:
-                #     img = np.ones((img_h, img_w, 3), dtype=np.float32)
 
                 # plt.axis('off')
                 # plt.imshow(img)
