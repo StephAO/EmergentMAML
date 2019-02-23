@@ -56,7 +56,7 @@ class SenderAgent(Agent):
         :return:
         """
         # Used to map RNN output to RNN input
-        output_to_input = tf.keras.layers.Dense(self.K, kernel_initializer=tf.glorot_uniform_initializer)
+        output_to_input = tf.layers.Dense(self.K, kernel_initializer=tf.glorot_uniform_initializer)
 
         # Decoder
         self.decoder = tf.contrib.seq2seq.BasicDecoder(self.gru_cell, self.helper, initial_state=self.s0,
