@@ -1,11 +1,12 @@
 from Agents.agent import Agent
 from data_handler import img_w, img_h
+import numpy as np
 import tensorflow as tf
 
 
 def cosine_similarity(a, b, axis=1):
-    normalize_a = tf.nn.l2_normalize(a, 0)
-    normalize_b = tf.nn.l2_normalize(b, 0)
+    normalize_a = tf.nn.l2_normalize(a, axis=axis)
+    normalize_b = tf.nn.l2_normalize(b, axis=axis)
     return tf.reduce_sum(tf.multiply(normalize_a, normalize_b), axis=axis)
 
 class ReceiverAgent(Agent):
@@ -13,6 +14,7 @@ class ReceiverAgent(Agent):
     def __init__(self, vocab_size, num_distractors, message, hum_msg, msg_len, use_images=False):
         self.query_key_size = 128
         self.message = message
+        # self.message = tf.placeholder(tf.float32, (1,16,2))
         self.msg_len = msg_len
         self.human_msg = hum_msg
         super().__init__(vocab_size, num_distractors, use_images=use_images)
@@ -34,14 +36,14 @@ class ReceiverAgent(Agent):
         Pass each image, i_k, through a pre-trained model, then a one layer perceptron, f(i_k)
         :return: chosen index of chosen image
         """
-        self.rnn_outputs, self.final_state = tf.nn.dynamic_rnn(self.gru_cell, self.message, initial_state=self.s0,
-                                                               sequence_length=self.msg_len, time_major=True)
+        self.rnn_outputs, self.final_state = tf.nn.dynamic_rnn(self.gru_cell, self.message, initial_state=self.s0, time_major=True)
+                                                               # sequence_length=self.msg_len, time_major=True)
         # Get RNN features
         # TODO consider using final rnn_output instead of final_state (not sure which is better)
-        self.rnn_features = tf.layers.dense(self.final_state, self.num_hidden, activation=tf.nn.relu,
+        self.rnn_features = tf.layers.dense(self.final_state, self.num_hidden, activation=tf.nn.leaky_relu,
                                             kernel_initializer=tf.glorot_uniform_initializer)
-        # self.rnn_features = tf.layers.dense(self.rnn_features, self.num_hidden, activation=tf.nn.relu,
-        #                                     kernel_initializer=tf.glorot_uniform_initializer)
+        self.rnn_features = tf.layers.dense(self.rnn_features, self.num_hidden, activation=tf.nn.leaky_relu,
+                                            kernel_initializer=tf.glorot_uniform_initializer)
         self.rnn_features = tf.layers.dense(self.rnn_features, self.query_key_size, activation=tf.nn.tanh,
                                             kernel_initializer=tf.glorot_uniform_initializer)
 
@@ -55,26 +57,33 @@ class ReceiverAgent(Agent):
         self.image_features = []
         self.img_feat_1 = []# delete
         self.energies = []
-        self.img_trans = tf.layers.Dense(self.query_key_size, activation=tf.nn.tanh,
+        self.img_trans_1 = tf.layers.Dense(self.num_hidden, activation=tf.nn.leaky_relu,
                                          kernel_initializer=tf.random_normal_initializer)
-
+        self.img_trans_2 = tf.layers.Dense(self.query_key_size, activation=tf.nn.tanh,
+                                         kernel_initializer=tf.random_normal_initializer)
+        self.freeze_cnn = True
         for d in range(self.D + 1):
             if self.use_images:
                 can = tf.placeholder(tf.float32, shape=(self.batch_size, img_h, img_w, 3))
                 self.candidates.append(can)
-                # img_feat_1 = Agent.pre_trained(can)
-                img_feat_1 = tf.layers.max_pooling2d(can, (16, 16), (16, 16))
-                img_feat_1 = tf.layers.flatten(img_feat_1)
-                img_feat = self.img_trans(img_feat_1)
+                img_feat = Agent.pre_trained(can)
+                if self.freeze_cnn:
+                    img_feat = tf.stop_gradient(img_feat)
+                img_feat = img_feat / tf.reduce_max(img_feat, axis=1, keepdims=True)
+                # img_feat_1 = tf.layers.max_pooling2d(can, (16, 16), (16, 16))
+                # img_feat_1 = tf.layers.flatten(img_feat_1)
 
             else: # use one-hot encoding
                 idx = tf.fill([self.batch_size], d)
-                img_feat = tf.one_hot(idx, self.K)
-                img_feat = self.img_trans(img_feat)
+                img_feat = tf.one_hot(idx, self.D+1)
+
+            self.img_feat_1.append(img_feat)
+
+            img_feat = self.img_trans_1(img_feat)
+            img_feat = self.img_trans_2(img_feat)
 
             # Try adding noise to img_feat and rnn_feat
             self.image_features.append(img_feat)
-            self.img_feat_1.append(img_feat_1)
 
             if self.loss_type == "pairwise":
                 self.energies.append(cosine_similarity(self.rnn_features, img_feat, axis=1))
@@ -114,7 +123,12 @@ class ReceiverAgent(Agent):
         elif self.loss_type == "invMSE":
             loss = tf.negative(tf.log(self.prob_dist + 1e-8))
 
-        self.loss = (tf.reduce_sum(loss) / self.batch_size)
+        # maximize cosine distance between image features
+        # a = tf.squeeze(tf.slice(self.img_feat_tensor, [0,0,0], [16, 1, 128]))
+        # b = tf.squeeze(tf.slice(self.img_feat_tensor, [0,1,0], [16, 1, 128]))
+        # self.diff_loss = tf.reduce_sum(cosine_similarity(a, b, axis=1)) / self.batch_size
+
+        self.loss = (tf.reduce_sum(loss) / self.batch_size) # + self.diff_loss
 
     def _build_optimizer(self):
         self.train_op = tf.contrib.layers.optimize_loss(
@@ -130,6 +144,10 @@ class ReceiverAgent(Agent):
         if self.use_images:
             for i, c in enumerate(candidates):
                 fd[self.candidates[i]] = c
+
+        # a = np.zeros((1,16,2))
+        # a[0, np.arange(16), target_idx] = 1
+        # fd[self.message] = a
 
     def close(self):
         self.sess.close()

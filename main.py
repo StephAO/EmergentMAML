@@ -15,11 +15,13 @@ def main():
         loss, acc = rg.play_game(e)
         if (e) % 20 == 0:
             print(loss, np.mean(accuracies[-20:]))
+        if e % 100 == 0:
+            print("--- EPOCH {0:5d} ---".format(e))
         losses.append(loss)
         accuracies.append(acc)
 
-        # if np.mean(accuracies[-20:]) == 1.0:
-            # break
+        if np.mean(accuracies[-20:]) == 1.0:
+            break
 
     print("--- EPOCH {0:5d} ---".format(e))
     ml = max(losses)

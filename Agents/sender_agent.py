@@ -12,6 +12,7 @@ class SenderAgent(Agent):
 
         super().__init__(vocab_size, num_distractors, use_images=use_images)
 
+
     def _build_input(self):
         """
         Define starting state and inputs to next state
@@ -20,46 +21,64 @@ class SenderAgent(Agent):
             - First input is a start of sentence token (sos), followed by the output of the previous timestep
         :return:
         """
+        self.freeze_cnn = True
         if self.use_images:
             # Determines starting state
             self.target_image = tf.placeholder(tf.float32, shape=(self.batch_size, img_h, img_w, 3))
-            img_feat = Agent.pre_trained(self.target_image)
+            self.pre_feat = Agent.pre_trained(self.target_image)
+            if self.freeze_cnn:
+                self.pre_feat = tf.stop_gradient(self.pre_feat)
+            self.pre_feat = self.pre_feat / tf.reduce_max(self.pre_feat, axis=1, keepdims=True)
 
         else: # Use one-hot encoding
             self.target_image = tf.placeholder(tf.int32, shape=(self.batch_size))
-            img_feat = tf.one_hot(self.target_image, self.K)
+            self.pre_feat = tf.one_hot(self.target_image, self.D+1)
 
-        self.fc = tf.layers.Dense(self.num_hidden, activation=tf.nn.relu,
+        self.fc = tf.layers.Dense(self.num_hidden, activation=tf.nn.leaky_relu,
                                   kernel_initializer=tf.glorot_uniform_initializer)
-        self.s0 = self.fc(img_feat)
+
+
+        self.s0 = self.fc(self.pre_feat)
         # weights = tf.get_default_graph().get_tensor_by_name(os.path.split(x.name)[0] + '/kernel:0'))
 
         self.starting_tokens = tf.stack([self.sos_token] * self.batch_size)
         # Determines input to decoder at next time step
         # TODO: define a end_fn that actually has a chance of triggering so that we can variable len messages
-        self.helper = tf.contrib.seq2seq.InferenceHelper(sample_fn=lambda outputs: outputs,
-                                                         sample_shape=[self.K],
-                                                         sample_dtype=tf.float32,
-                                                         start_inputs=self.starting_tokens,
-                                                         end_fn=lambda sample_ids:
-                                                            tf.reduce_all(tf.equal(sample_ids, self.eos_token))
-                                                         )
+        if not self.use_mlp:
+            self.helper = tf.contrib.seq2seq.InferenceHelper(sample_fn=lambda outputs: outputs,
+                                                             sample_shape=[self.K],
+                                                             sample_dtype=tf.float32,
+                                                             start_inputs=self.starting_tokens,
+                                                             end_fn=lambda sample_ids:
+                                                                tf.reduce_all(tf.equal(sample_ids, self.eos_token))
+                                                             )
 
 
     def _build_output(self):
         # Used to map RNN output to RNN input
-        output_to_input = tf.layers.Dense(self.K, kernel_initializer=tf.glorot_uniform_initializer)
+        if not self.use_mlp:
+            output_to_input = tf.layers.Dense(self.K, kernel_initializer=tf.glorot_uniform_initializer)
 
-        # Decoder
-        self.decoder = tf.contrib.seq2seq.BasicDecoder(self.gru_cell, self.helper, initial_state=self.s0,
-                                                       output_layer=output_to_input)
+            # Decoder
+            self.decoder = tf.contrib.seq2seq.BasicDecoder(self.gru_cell, self.helper, initial_state=self.s0,
+                                                           output_layer=output_to_input)
 
-        self.rnn_outputs, self.final_state, self.final_sequence_lengths = \
-            tf.contrib.seq2seq.dynamic_decode(self.decoder, output_time_major=True, maximum_iterations=self.L)
+            self.rnn_outputs, self.final_state, self.final_sequence_lengths = \
+                tf.contrib.seq2seq.dynamic_decode(self.decoder, output_time_major=True, maximum_iterations=self.L)
 
-        self.rnn_outputs = self.rnn_outputs[0]
+            self.rnn_outputs = self.rnn_outputs[0]
 
-        # self.final_features = tf.layers.dense(self.output, self.num_fc_hidden, activation=tf.nn.relu)
+        else:
+            # self.img_trans_1 = tf.layers.dense(self.s0, self.num_hidden, activation=tf.nn.leaky_relu,
+            #                                    kernel_initializer=tf.random_normal_initializer)
+            # self.img_trans_2 = tf.layers.dense(self.img_trans_1, self.num_hidden, activation=tf.nn.leaky_relu,
+            #                                    kernel_initializer=tf.random_normal_initializer)
+            self.rnn_outputs = tf.layers.dense(self.s0, self.K, kernel_initializer=tf.random_normal_initializer)
+
+            self.rnn_outputs = tf.expand_dims(self.rnn_outputs, axis=0)
+            self.final_sequence_lengths = None
+
+        # self.final_features = tf.layers.dense(self.output, self.num_fc_hidden, activation=tf.nn.leaky_relu)
         # self.logits = tf.layers.dense(self.final_features, self.vocab_size, activation=None)
 
         # Annealing temperature

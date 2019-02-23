@@ -16,7 +16,7 @@ class Referential_Game:
         Distractor Set Size [Int]
     """
 
-    def __init__(self, K=2, D=1, use_images=True):
+    def __init__(self, K=10, D=1, use_images=True):
         """
 
         :param sender: sender in game
@@ -64,12 +64,44 @@ class Referential_Game:
         self.sender.fill_feed_dict(fd, target)
         self.receiver.fill_feed_dict(fd, candidates, target_indices)
 
-        message, prediction, loss = self.receiver.run_game(fd)
-
         #### Just debugging
-        if e % 100 == 0:
-            f, f_, p, e_ = self.receiver.sess.run([self.receiver.image_features, self.receiver.rnn_features, self.receiver.img_feat_1, self.receiver.energy_tensor], feed_dict=fd)
-            print(message[0][0][:4])
+        if (e-1) % 5 == 0:# and self.use_images:
+            # f, f_, p, e_ = self.receiver.sess.run([self.receiver.image_features, self.receiver.rnn_features, self.receiver.img_feat_1, self.receiver.energy_tensor], feed_dict=fd)
+            sender, receiver = self.receiver.sess.run([self.sender.pre_feat, self.receiver.img_feat_1], feed_dict=fd)
+
+            # before, mid, after = np.array(before), np.array(mid), np.array(after)
+
+            # fig = plt.figure()
+            # plt.axis('off')
+            # fig.patch.set_facecolor('xkcd:gray')
+            # fig.add_subplot(3, 2, 1)
+            # plt.imshow(before[0][0])
+            #
+            # fig.add_subplot(3, 2, 2)
+            # plt.imshow(before[1][0])
+            #
+            # fig.add_subplot(3, 2, 3)
+            # plt.imshow(mid[0][:, :64])
+            #
+            # fig.add_subplot(3, 2, 4)
+            # plt.imshow(mid[1][:, :64])
+            #
+            # fig.add_subplot(3, 2, 5)
+            # plt.imshow(after[0])
+            #
+            # fig.add_subplot(3, 2, 6)
+            # plt.imshow(after[1])
+
+            # print(mid.shape)
+            # print(np.all(np.equal(mid[0], mid[1])))
+            # print(np.mean(sender), np.mean(receiver))
+            # print(sender[0], sender[1], receiver[0][0], receiver[1][0])
+            # print("--------")
+            # print(c[95:97, :32].shape, mid[:, 0, :32].shape, after[:, 0, :32].shape)
+            # plt.show()
+
+
+            # print(message[0][0][:4])
 
             # plt.axis('off')
             # print(np.shape(p))
@@ -82,13 +114,25 @@ class Referential_Game:
             # for i in p[:4 ]:
             #     print(i[0][:4])
 
-            for i in f[:4 ]:
-                print(i[0][:4])
+            # for i in f[:4 ]:
+            #     print(i[0][:4])
+            #
+            # print(f_[0][:4])
+            #
+            # print(e_[0])
 
-            print(f_[0][:4])
+            # energies, target_energy, rnn = self.receiver.sess.run(
+            #     [self.receiver.energy_tensor, self.receiver.target_energy, self.receiver.rnn_features], feed_dict=fd)
+            #
+            # print("==>", np.mean(np.abs(np.expand_dims(target_energy, axis=1) - energies)), np.max(energies))
+        # print(target_energy[0])
+        # print(target_indices)
 
-            print(e_[0])
         #####
+        # print(self.receiver.sess.run([self.receiver.diff_loss], feed_dict=fd))
+
+        message, prediction, loss = self.receiver.run_game(fd)
+        # print("==>", message[0][0], target_indices[0])
 
         accuracy = np.sum(prediction==target_indices) / np.float(self.batch_size)
 

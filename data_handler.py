@@ -53,10 +53,10 @@ class Data_Handler:
                 img = transform.resize(img, (img_h, img_w), anti_aliasing=True, mode='reflect')
 
                 # Making the problem easier to debug
-                if i == 1:
-                    img = np.zeros((img_h, img_w, 3), dtype=np.float32)
-                else:
-                    img = np.ones((img_h, img_w, 3), dtype=np.float32)
+                # if i == 0:
+                #     img = np.zeros((img_h, img_w, 3), dtype=np.float32)
+                # else:
+                #     img = np.ones((img_h, img_w, 3), dtype=np.float32)
 
                 # plt.axis('off')
                 # plt.imshow(img)

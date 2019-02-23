@@ -18,14 +18,13 @@ class Agent:
         # TODO deal with hyper parameters better
         self.use_images = use_images
         self.num_hidden = 512
-        self.batch_size = 32
+        self.batch_size = 16
         self.batch_shape = (self.batch_size, img_h, img_w, 3)
         self.K = vocab_size
         self.D = num_distractors
-        self.L = 1  # Maximum number of iterations
-        self.max_len = tf.constant(15) # maximum message length
+        self.L = 1  # Maximum message length
         self.epoch = tf.train.get_or_create_global_step()
-        self.lr = 0.0001 #self._cyclicLR() #0.005
+        self.lr = 0.001 #self._cyclicLR() #0.005
         self.gradient_clip = 10.0
         self.loss_type = loss_type
         # TODO: properly define start/end tokens
@@ -33,6 +32,10 @@ class Agent:
         # And end token to [0, 1, 0, 0, ..., 0]
         self.sos_token = tf.ones((self.K,))
         self.eos_token = tf.one_hot(1, self.K)
+
+        # FOR DEBUGGING
+        self.use_mlp = False
+        #
 
 
         gpu_options = tf.GPUOptions(allow_growth=True)
@@ -74,6 +77,7 @@ class Agent:
         :return: None
         """
         # TODO Use tf.contrib.cudnn_rnn.CudnnGRU for better GPU performance
+        # if not self.use_mlp:
         self.gru_cell = tf.nn.rnn_cell.GRUCell(self.num_hidden, kernel_initializer=tf.random_normal_initializer)
 
 
