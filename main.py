@@ -38,7 +38,14 @@ def main(epochs=1000, D=1, K=100, use_images=True, loss_type='pairwise'):
     
     plt.savefig("./output_graph.png")
 
-
+def bool_type(val):
+    """
+    Return the corresponding value of val
+    """
+    if val.lower() in ('y', 'yes', 'true', 't'):
+        return True
+    else:
+        return False
 
 if __name__ == "__main__":
     
@@ -58,7 +65,7 @@ if __name__ == "__main__":
         dest="K")
     args_parser.add_argument('-E', '--epochs', default=epochs, type=int, 
         help="Number of epochs", dest="E")
-    args_parser.add_argument('-I', '--images', default=use_images, type=bool, 
+    args_parser.add_argument('-I', '--images', default=use_images, type=bool_type, 
         help="use images or one hot encoded vectors", dest="I")
     args_parser.add_argument('-L', '--loss-type', default=loss_type, 
         choices=['invMSE', 'pairwise', 'MSE'], dest="L")

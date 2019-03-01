@@ -25,7 +25,8 @@ class Referential_Game:
         self.use_images = use_images
         self.sender = SenderAgent(K, D, use_images=use_images)
         recv_msg, hum_msg, msg_len = self.sender.get_output()
-        self.receiver = ReceiverAgent(K, D, recv_msg, msg_len, use_images=use_images)
+        self.receiver = ReceiverAgent(K, D, recv_msg, msg_len, 
+            use_images=use_images, loss_type=loss_type)
         if use_images:
             self.dh = dh.Data_Handler()
         self.batch_size = self.sender.batch_size
