@@ -92,14 +92,23 @@ class ReceiverAgent(Agent):
             if self.loss_type == "pairwise":
                 self.energies.append(cosine_similarity(self.rnn_features, img_feat, axis=1))
             elif self.loss_type == "MSE":
-                e = tf.negative(tf.reduce_sum(tf.pow(tf.abs(tf.subtract(self.rnn_features, img_feat) + 1e-8), 0.5), axis=1))
+                e = tf.reduce_sum(tf.squared_difference(self.rnn_features, img_feat), axis=1)
                 self.energies.append(e)
             elif self.loss_type == "invMSE":
-                e = tf.reduce_sum(tf.divide(1., tf.pow(tf.subtract(self.rnn_features, img_feat), 2) + 1e-8), axis=1)
+                e = tf.reduce_sum(tf.squared_difference(self.rnn_features, img_feat), axis=1)
                 self.energies.append(e)
 
         #
         self.energy_tensor = tf.stack(self.energies, axis=1)
+        
+        if (self.loss_type == "invMSE"):
+            self.energy_tensor = \
+                tf.negative(tf.log(
+                    tf.add(tf.nn.softmax(
+                        tf.divide(1, tf.add(self.energy_tensor, 1e-8)), 
+                    axis=1), 1e-8)
+                ))
+        
         # self.energy_tensor = tf.divide(self.energy_tensor, tf.reduce_max(tf.abs(self.energy_tensor), axis=1, keepdims=True))
         self.img_feat_tensor = tf.stack(self.image_features, axis=1)
         # Get prediction
@@ -126,11 +135,17 @@ class ReceiverAgent(Agent):
 
         elif self.loss_type == "MSE":
             # Classic mse loss
-            loss = float(self.D) - self.D * self.target_energy + tf.reduce_sum(self.energy_tensor, axis=1)
+            loss = tf.divide(tf.subtract(tf.reduce_sum(
+                tf.nn.relu(1 - tf.expand_dims(self.target_energy, axis=1) + self.energy_tensor), 
+                axis=1), 1), self.D)            
+            # loss = float(self.D) - self.D * self.target_energy + tf.reduce_mean(self.energy_tensor, axis=1)
 
         elif self.loss_type == "invMSE":
             # loss taken from https://arxiv.org/abs/1710.06922 - supposed to better than others
-            loss = tf.negative(tf.log(self.prob_dist + 1e-8))
+            loss = tf.subtract(tf.reduce_sum(
+                tf.nn.relu(1 - tf.expand_dims(self.target_energy, axis=1) + self.energy_tensor),
+                axis=1), 1)            
+            # loss = float(self.D) - self.D * self.target_energy + tf.reduce_sum(self.energy_tensor, axis=1)
 
         self.loss = (tf.reduce_sum(loss) / self.batch_size)
 

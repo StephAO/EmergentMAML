@@ -11,7 +11,7 @@ def main():
     rg = referential_game.Referential_Game()
     losses = []
     accuracies = []
-    for e in range(1, epochs):
+    for e in range(1, epochs + 1):
         loss, acc = rg.play_game(e)
 
         # Print and collect stats
@@ -30,9 +30,11 @@ def main():
     ml = max(losses)
     losses_ = [l / ml for l in losses]
     accuracies_ = [np.mean(accuracies[i: i + 10]) for i in range(len(accuracies) - 10)]
-
+    
     plt.plot(losses_, 'r', accuracies_, 'g')  # , lrs, 'b')
-    plt.show()
+    # plt.show()
+    
+    plt.savefig("./output_graph.png")
 
 
 
