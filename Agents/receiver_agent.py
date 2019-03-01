@@ -11,11 +11,11 @@ def cosine_similarity(a, b, axis=1):
 
 class ReceiverAgent(Agent):
 
-    def __init__(self, vocab_size, num_distractors, message, msg_len, use_images=False):
+    def __init__(self, vocab_size, num_distractors, message, msg_len, use_images=False, loss_type='pairwise'):
         self.query_key_size = 128
         self.message = message
         self.msg_len = msg_len
-        super().__init__(vocab_size, num_distractors, use_images=use_images)
+        super().__init__(vocab_size, num_distractors, use_images=use_images, loss_type=loss_type)
 
     def _build_input(self):
         """

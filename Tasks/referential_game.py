@@ -16,7 +16,7 @@ class Referential_Game:
         Distractor Set Size [Int]
     """
 
-    def __init__(self, K=100, D=1, use_images=True):
+    def __init__(self, K=100, D=1, use_images=True, loss_type='pairwise'):
         """
         :param K [Int]: Vocabulary Size
         :param D [Int]: Distractor Set Size

@@ -1,14 +1,16 @@
+import sys
+import argparse as ap
 import matplotlib.pyplot as plt
 import numpy as np
 from Tasks import referential_game
 
-def main():
+def main(epochs=1000, D=1, K=100, use_images=True, loss_type='pairwise'):
     """
     Run epochs of games
     :return:
     """
-    epochs = 10000
-    rg = referential_game.Referential_Game()
+    rg = referential_game.Referential_Game(K=K, D=D, use_images=use_images, 
+        loss_type=loss_type)
     losses = []
     accuracies = []
     for e in range(1, epochs + 1):
@@ -39,4 +41,31 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    
+    # Default values
+    epochs = 10000
+    D = 1
+    K = 100
+    use_images = True
+    loss_type = 'pairwise'
+    
+    # Extract options from command line 
+    args_parser = ap.ArgumentParser()
+    
+    args_parser.add_argument('-D', default=D, type=int, 
+        help="Number of distractor images", dest="D")
+    args_parser.add_argument('-K', default=K, type=int, help="Vocabulary size",
+        dest="K")
+    args_parser.add_argument('-E', '--epochs', default=epochs, type=int, 
+        help="Number of epochs", dest="E")
+    args_parser.add_argument('-I', '--images', default=use_images, type=bool, 
+        help="use images or one hot encoded vectors", dest="I")
+    args_parser.add_argument('-L', '--loss-type', default=loss_type, 
+        choices=['invMSE', 'pairwise', 'MSE'], dest="L")
+    
+    args = args_parser.parse_args()
+    
+    main(epochs=args.E, D=args.D, K=args.K, use_images=args.I, loss_type=args.L)
+        
+        
+    
