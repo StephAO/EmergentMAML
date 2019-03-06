@@ -25,19 +25,13 @@ class SenderAgent(Agent):
             self.pre_feat = Agent.pre_trained(self.target_image)
             if self.freeze_cnn:
                 self.pre_feat = tf.stop_gradient(self.pre_feat)
-            # self.pre_feat = tf.keras.layers.Conv2D(128, (3,3))(self.pre_feat)
-            # self.pre_feat = tf.keras.layers.GlobalAveragePooling2D()(self.pre_feat)
             self.pre_feat = self.pre_feat / tf.maximum(tf.reduce_max(self.pre_feat, axis=1, keepdims=True), self.epsilon)
 
         else: # Use one-hot encoding
             self.target_image = tf.placeholder(tf.int32, shape=(self.batch_size))
             self.pre_feat = tf.one_hot(self.target_image, self.D+1)
 
-        self.fc = tf.keras.layers.Dense(self.num_hidden, activation=tf.nn.leaky_relu,
-                                  kernel_initializer=tf.glorot_uniform_initializer)
-
-
-        self.s0 = self.fc(self.pre_feat)
+        self.s0 = Agent.img_fc(self.pre_feat)
 
         self.starting_tokens = tf.stack([self.sos_token] * self.batch_size)
         # Determines input to decoder at next time step
@@ -56,10 +50,11 @@ class SenderAgent(Agent):
         :return:
         """
         # Used to map RNN output to RNN input
-        output_to_input = tf.layers.Dense(self.K, kernel_initializer=tf.glorot_uniform_initializer)
+        output_to_input = tf.layers.Dense(self.K, #activation=lambda x: tf.nn.softmax,
+                                          kernel_initializer=tf.glorot_uniform_initializer)
 
         # Decoder
-        self.decoder = tf.contrib.seq2seq.BasicDecoder(self.gru_cell, self.helper, initial_state=self.s0,
+        self.decoder = tf.contrib.seq2seq.BasicDecoder(Agent.gru_cell, self.helper, initial_state=self.s0,
                                                        output_layer=output_to_input)
 
         self.rnn_outputs, self.final_state, self.final_sequence_lengths = \

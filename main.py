@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from Tasks import referential_game
 
-def main(epochs=1000, D=1, K=100, use_images=True, loss_type='pairwise'):
+def main(epochs=10000, D=1, K=100, use_images=True, loss_type='pairwise'):
     """
     Run epochs of games
     :return:
@@ -18,7 +18,7 @@ def main(epochs=1000, D=1, K=100, use_images=True, loss_type='pairwise'):
 
         # Print and collect stats
         if (e) % 20 == 0:
-            print(loss, np.mean(accuracies[-20:]))
+            print("loss: {0:1.4f}, accuracy: {1:3.2f}%".format(np.mean(losses[-20:]), np.mean(accuracies[-20:])*100))
         if e % 100 == 0:
             print("--- EPOCH {0:5d} ---".format(e))
         losses.append(loss)
@@ -72,7 +72,7 @@ if __name__ == "__main__":
     
     args = args_parser.parse_args()
     
-    main(epochs=args.E, D=args.D, K=args.K, use_images=args.I, loss_type=args.L)
+    main()#epochs=args.E, D=args.D, K=args.K, use_images=args.I, loss_type=args.L)
         
         
     

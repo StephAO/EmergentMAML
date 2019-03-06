@@ -7,9 +7,15 @@ class Agent:
     Abstract base class for all agents - eventually the weights contained here will be the weights trained using MAML
     """
 
-    # CNN pre-trained on imagenet, see https://github.com/keras-team/keras-applications for other options
+    #  Shared CNN pre-trained on imagenet, see https://github.com/keras-team/keras-applications for other options
     pre_trained = tf.keras.applications.mobilenet_v2.MobileNetV2(include_top=False, weights='imagenet', pooling='max',
                                                                  input_shape=(img_h, img_w, 3))
+    # Shared image fc layer
+    img_fc = tf.keras.layers.Dense(512, activation=tf.nn.tanh,
+                                   kernel_initializer=tf.glorot_uniform_initializer)
+
+    # Shared GRU cell
+    gru_cell = tf.nn.rnn_cell.GRUCell(512, kernel_initializer=tf.random_normal_initializer)
 
     def __init__(self, vocab_size, num_distractors, use_images=False, loss_type='pairwise', freeze_cnn=True):
         """
@@ -34,7 +40,7 @@ class Agent:
 
         # TRAINING PARAMETERS
         self.epoch = tf.train.get_or_create_global_step()
-        self.lr = 0.0001 #self._cyclicLR() #0.005
+        self.lr = 0.001 #self._cyclicLR() #0.005
         self.gradient_clip = 10.0
         self.loss_type = loss_type
 
@@ -89,7 +95,9 @@ class Agent:
         :return: None
         """
         # TODO Use tf.contrib.cudnn_rnn.CudnnGRU for better GPU performance
-        self.gru_cell = tf.nn.rnn_cell.GRUCell(self.num_hidden, kernel_initializer=tf.random_normal_initializer)
+        # TODO test GRU vs LSTM
+        # self.gru_cell = tf.nn.rnn_cell.GRUCell(self.num_hidden, kernel_initializer=tf.random_normal_initializer)
+        pass
 
     def _build_output(self):
         """

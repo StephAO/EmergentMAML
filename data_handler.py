@@ -20,6 +20,7 @@ class Data_Handler:
         # self.coco_capts = COCO(self.caption_file)
         # COCO categories
         self.cats = self.coco.loadCats(self.coco.getCatIds())
+        self.catIds = self.coco.getCatIds() #catNms=["elephant", "airplane"])
 
     def get_images(self, imgs_per_batch=1, num_batches=1, captions=False):
         """
@@ -34,7 +35,9 @@ class Data_Handler:
         for b in range(num_batches):
             # categories = np.random.choice(self.cats, n)
             # Testing using the same two categories to make things easier, uncomment to improve this
-            catIds = self.coco.getCatIds(catNms=['airplane', 'elephant'])
+            cat_idxs = np.random.randint(len(self.catIds), size=imgs_per_batch)
+            catIds = [self.catIds[i] for i in cat_idxs]
+
             annotations = []
             for i, cat in enumerate(catIds):
                 # catId = self.coco.getCatIds(catNms=[cat["name"]])
