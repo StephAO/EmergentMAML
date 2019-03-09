@@ -1,3 +1,4 @@
+from comet_ml import Experiment
 from data_handler import img_w, img_h
 import numpy as np
 import tensorflow as tf
@@ -17,7 +18,8 @@ class Agent:
     # Shared GRU cell
     gru_cell = tf.nn.rnn_cell.GRUCell(512, kernel_initializer=tf.random_normal_initializer)
 
-    def __init__(self, vocab_size, num_distractors, use_images=False, loss_type='pairwise', freeze_cnn=True):
+    def __init__(self, vocab_size, num_distractors, use_images=False, loss_type='pairwise', freeze_cnn=True,
+                 track_results=False):
         """
         Base agent, also currently holds a lot of hyper parameters
         :param vocab_size:
@@ -47,6 +49,14 @@ class Agent:
         # OTHER
         self.epsilon = 1e-12
 
+        # SET UP comet tracking
+        self.params = {}
+        self.experiment = Experiment(api_key='1jl4lQOnJsVdZR6oekS6WO5FI',
+                                     project_name='EmergentMAML',
+                                     auto_param_logging=False, auto_metric_logging=False,
+                                     disabled=(not track_results))
+        self.set_params()
+
         # TODO: properly define start/end tokens
         # Currently setting start token to [1, 0, 0, ...., 0]
         # And end token to [0, 1, 0, 0, ..., 0]
@@ -67,6 +77,23 @@ class Agent:
 
         # Initialize
         self.sess.run(tf.global_variables_initializer())
+
+    def set_params(self):
+        """
+        Create parameter dictionary from necessary parameters and logs them to comet.
+        Requires that model has initialized these necessary parameters i.e. run this at the end of the init
+        """
+        self.params.update({
+            "K": self.K,
+            "D": self.D,
+            "L": self.L,
+            "lr": self.lr,
+            "loss_type": self.loss_type,
+            "batch_size": self.batch_size,
+            "num_hidden": self.num_hidden
+        })
+
+        self.experiment.log_multiple_params(self.params)
 
     def _cyclicLR(self):
         """
@@ -117,5 +144,12 @@ class Agent:
         return self.output
 
     def run_game(self, fd):
-        return self.sess.run([self.train_op, self.message, self.output, self.loss], feed_dict=fd)[1:]
+        _, msg, accuracy, loss = self.sess.run([self.train_op, self.message, self.accuracy, self.loss], feed_dict=fd)
+
+        metrics = {"accuracy": accuracy,
+                   "loss": loss}
+
+        self.experiment.log_multiple_metrics(metrics)
+        self.experiment.set_step(self.epoch)
+        return msg, accuracy, loss
 

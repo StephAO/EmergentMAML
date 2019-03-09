@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-class Referential_Game:
+class ReferentialGame:
     """
     Class to play referential game, where a sender sees a target image and must send a message to a receiver, who must
     the pick the target image from a set of candidate images.
@@ -25,14 +25,12 @@ class Referential_Game:
         self.use_images = use_images
         self.sender = SenderAgent(K, D, use_images=use_images)
         recv_msg, hum_msg, msg_len = self.sender.get_output()
-        self.receiver = ReceiverAgent(K, D, recv_msg, msg_len, 
-            use_images=use_images, loss_type=loss_type)
+        self.receiver = ReceiverAgent(K, D, recv_msg, msg_len, use_images=use_images, loss_type=loss_type)
         if use_images:
             self.dh = dh.Data_Handler()
         self.batch_size = self.sender.batch_size
-        self.K = K # Vocabulary Size
-        self.D = D # Distractor Set Size
-
+        self.K = K  # Vocabulary Size
+        self.D = D  # Distractor Set Size
 
     def play_game(self, e):
         """
@@ -58,8 +56,6 @@ class Referential_Game:
         self.sender.fill_feed_dict(fd, target)
         self.receiver.fill_feed_dict(fd, candidates, target_indices)
 
-        message, prediction, loss = self.receiver.run_game(fd)
-
-        accuracy = np.sum(prediction==target_indices) / np.float(self.batch_size)
+        message, accuracy, loss = self.receiver.run_game(fd)
 
         return loss, accuracy

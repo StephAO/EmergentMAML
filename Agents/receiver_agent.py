@@ -9,6 +9,7 @@ def cosine_similarity(a, b, axis=1):
     normalize_b = tf.nn.l2_normalize(b, axis=axis)
     return tf.reduce_sum(tf.multiply(normalize_a, normalize_b), axis=axis)
 
+
 class ReceiverAgent(Agent):
 
     def __init__(self, vocab_size, num_distractors, message, msg_len, use_images=False, loss_type='pairwise'):
@@ -49,8 +50,7 @@ class ReceiverAgent(Agent):
         # self.rnn_features = tf.keras.layers.Dense(self.num_hidden, activation=tf.nn.leaky_relu,
         #                                     kernel_initializer=tf.glorot_uniform_initializer)(self.rnn_features)
         self.rnn_features = tf.keras.layers.Dense(self.query_key_size, activation=tf.nn.tanh,
-                                            kernel_initializer=tf.glorot_uniform_initializer)(self.final_state) #(self.rnn_features)
-
+                                                  kernel_initializer=tf.glorot_uniform_initializer)(self.final_state)  # (self.rnn_features)
 
         # TODO: consider adding noise to rnn features - is this different than just changing temperature?
         # self.rnn_features = tf.keras.layers.GaussianNoise(stddev=0.0001)(self.rnn_features)
@@ -59,7 +59,7 @@ class ReceiverAgent(Agent):
         # TODO - can we do this with only matrices?
         self.candidates = []
         self.image_features = []
-        self.img_feat_1 = []# delete
+        self.img_feat_1 = []  # delete
         self.energies = []
 
         for d in range(self.D + 1):
@@ -72,7 +72,7 @@ class ReceiverAgent(Agent):
 
                 img_feat = img_feat / tf.maximum(tf.reduce_max(img_feat, axis=1, keepdims=True), self.epsilon)
 
-            else: # use one-hot encoding
+            else:  # use one-hot encoding
                 idx = tf.fill([self.batch_size], d)
                 img_feat = tf.one_hot(idx, self.D+1)
 
@@ -83,7 +83,7 @@ class ReceiverAgent(Agent):
 
             # Define energies
             if self.loss_type == "pairwise":
-                #Cosine similarity
+                # Cosine similarity
                 # Loss taken from https://arxiv.org/abs/1705.11192
                 self.energies.append(cosine_similarity(self.rnn_features, img_feat, axis=1))
             elif self.loss_type == "MSE":
@@ -111,7 +111,9 @@ class ReceiverAgent(Agent):
         self.img_feat_tensor = tf.stack(self.image_features, axis=1)
         # Get prediction
         self.prob_dist = tf.nn.softmax(self.energy_tensor + 1e-8)
-        self.output = tf.argmax(self.prob_dist, axis=1)
+        self.prediction = tf.argmax(self.prob_dist, axis=1)
+
+        self.accuracy = tf.reduce_sum(self.prediction == self.target_indices) / np.float(self.batch_size)
 
     def _build_losses(self):
         """
