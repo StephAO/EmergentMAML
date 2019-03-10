@@ -55,19 +55,20 @@ class Data_Handler:
                 if img_batches > len(data_idx):
                     break
                 cat_idxs = np.random.randint(len(data_idx), size=imgs_per_batch)
-                catIds = [data_idx.keys()[i] for i in cat_idxs]
+                cat_ids = [data_idx.keys()[i] for i in cat_idxs]
 
                 annotations = []
-                for i, cat in enumerate(catIds):
-                    img = self.coco.loadImgs(data[cat])[0]
+                for i, cat in enumerate(cat_ids):
+                    img_id = data[cat][data_idx[cat]]
+                    img = self.coco.loadImgs(img_id)[0]
+                    data_idx[cat] -= 1
+                    if data_idx[cat] <= 0:
+                        data_idx.pop(cat)
                     img = io.imread('{}/images/{}/{}'.format(self.data_dir, self.dataType, img['file_name']))
 
-
-                    # Ignore images that don't have 3 channels
-                    # TODO: consider making bw images 3 channels to make them useable
+                    # Increase channels (by copying) of bw images that don't have 3 channels
                     while img.shape[-1] != 3:
-                        img = self.coco.loadImgs(imgIds[np.random.randint(0, len(imgIds))])[0]
-                        img = io.imread('{}/images/{}/{}'.format(self.data_dir, self.dataType, img['file_name']))
+                        img = np.repeat(img[:, :, np.newaxis], 3, axis=2)
 
                     img = transform.resize(img, (img_h, img_w), anti_aliasing=True, mode='reflect')
 
@@ -77,8 +78,8 @@ class Data_Handler:
 
                     img_batches[i, b] = img
                     if captions:
-                        annIds = self.coco_capts.getAnnIds(imgIds=imgIds)
-                        anns = self.coco_capts.loadAnns(annIds)
+                        ann_id = self.coco_capts.getAnnIds(imgIds=img_id)
+                        anns = self.coco_capts.loadAnns(ann_id)
                         annotations.append(anns)
 
                 if captions:

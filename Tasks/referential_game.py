@@ -32,10 +32,29 @@ class ReferentialGame:
         self.K = K  # Vocabulary Size
         self.D = D  # Distractor Set Size
 
-    def play_game(self, e):
+    def play_epoch(self):
+        """
+        Play an epoch of a game defined by iterating over of each image of the dataset once (within a margin)
+        For not using images, this is identical of play_game
+        :return:
+        """
+        if not self.use_images:
+            return self.play_game()
+
+        image_gen = self.dh.get_images(imgs_per_batch=self.D + 1, num_batches=self.batch_size)
+        while True:
+            try:
+                images = next(image_gen)
+                message, accuracy, loss = self.play_game(images=images)
+            except StopIteration:
+                break
+
+        return loss, accuracy
+
+    def play_game(self, images=None):
         """
         Play a single instance of the game
-        :return: None
+        :return:
         """
         # Get target indices
         target_indices = np.random.randint(self.D + 1, size=self.batch_size)
@@ -45,7 +64,6 @@ class ReferentialGame:
         candidates = []
 
         if self.use_images:
-            images = self.dh.get_images(imgs_per_batch=self.D + 1, num_batches=self.batch_size)
             for i, ti in enumerate(target_indices):
                 target_images[i] = images[ti][i]
             target = target_images

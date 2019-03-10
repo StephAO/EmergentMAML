@@ -41,7 +41,7 @@ class Agent:
         self.batch_shape = (self.batch_size, img_h, img_w, 3)
 
         # TRAINING PARAMETERS
-        self.epoch = tf.train.get_or_create_global_step()
+        self.step = tf.train.get_or_create_global_step()
         self.lr = 0.001 #self._cyclicLR() #0.005
         self.gradient_clip = 10.0
         self.loss_type = loss_type
@@ -150,6 +150,6 @@ class Agent:
                    "loss": loss}
 
         self.experiment.log_multiple_metrics(metrics)
-        self.experiment.set_step(self.epoch)
+        self.experiment.set_step(self.step)
         return msg, accuracy, loss
 

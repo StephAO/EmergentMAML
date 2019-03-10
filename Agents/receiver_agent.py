@@ -134,7 +134,7 @@ class ReceiverAgent(Agent):
     def _build_optimizer(self):
         self.train_op = tf.contrib.layers.optimize_loss(
             loss=self.loss,
-            global_step=self.epoch,
+            global_step=self.step,
             learning_rate=self.lr,
             optimizer="Adam",
             # some gradient clipping stabilizes training in the beginning.
