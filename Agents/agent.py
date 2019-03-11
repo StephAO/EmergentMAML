@@ -14,7 +14,7 @@ class Agent:
     # MODEL PARAMETERS
     freeze_cnn = True
     num_hidden = 512
-    batch_size = 16
+    batch_size = 64
     batch_shape = (batch_size, img_h, img_w, 3)
 
     # TRAINING PARAMETERS
