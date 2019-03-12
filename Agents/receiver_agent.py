@@ -12,11 +12,11 @@ def cosine_similarity(a, b, axis=1):
 
 class ReceiverAgent(Agent):
 
-    def __init__(self, vocab_size, num_distractors, message, msg_len, use_images=False, loss_type='pairwise'):
+    def __init__(self, vocab_size, num_distractors, max_len, message, msg_len, loss_type='pairwise', **kwargs):
         self.message = message
         self.msg_len = msg_len
         with tf.variable_scope("receiver"):
-            super().__init__(vocab_size, num_distractors, use_images=use_images, loss_type=loss_type)
+            super().__init__(vocab_size, num_distractors, max_len, loss_type=loss_type, **kwargs)
 
     def _build_input(self):
         """

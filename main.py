@@ -2,7 +2,7 @@ import sys
 import argparse as ap
 import matplotlib.pyplot as plt
 import numpy as np
-from Tasks import referential_game
+from Tasks import referential_game, image_captioning
 
 def converged(losses, precision=0.0001, prev_n=3):
     """
@@ -21,27 +21,28 @@ def converged(losses, precision=0.0001, prev_n=3):
 
     return True
 
-def main(epochs=10, D=7, K=500, use_images=True, loss_type='pairwise'):
+def main(epochs=10, D=7, K=500, L=15, use_images=True, loss_type='pairwise'):
     """
     Run epochs of games
     :return:
     """
-    rg = referential_game.ReferentialGame(K=K, D=D, use_images=use_images, loss_type=loss_type)
+    # rg = referential_game.ReferentialGame(K=K, D=D, L=L, use_images=use_images, loss_type=loss_type)
+    rg = image_captioning.ImageCaptioning(K=K, L=L)
 
     losses = []
 
     # Starting point
-    print("Validating epoch 0:")
-    accuracy, loss = rg.play_epoch(0, data_type="val")
-    print("\rloss: {0:1.4f}, accuracy: {1:5.2f}%".format(loss, accuracy * 100), end="\n")
+    # print("Validating epoch 0:")
+    # accuracy, loss = rg.train_epoch(0, data_type="val")
+    # print("\rloss: {0:1.4f}, accuracy: {1:5.2f}%".format(loss, accuracy * 100), end="\n")
 
     # Start training
     for e in range(1, epochs + 1):
         print("Training epoch {0}".format(e))
-        accuracy, loss = rg.play_epoch(e, data_type="train")
+        accuracy, loss = rg.train_epoch(e, data_type="train")
         print("\rloss: {0:1.4f}, accuracy: {1:5.2f}%".format(loss, accuracy * 100), end="\n")
         print("Validating epoch {0}".format(e))
-        accuracy, loss = rg.play_epoch(e, data_type="val")
+        accuracy, loss = rg.train_epoch(e, data_type="val")
         print("\rloss: {0:1.4f}, accuracy: {1:5.2f}%".format(loss, accuracy * 100), end="\n")
         losses.append(loss)
 

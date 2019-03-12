@@ -1,6 +1,7 @@
 import tensorflow as tf
 
 from Agents.sender_agent import SenderAgent
+from Agents.agent import Agent
 
 
 class ImageCaptioner(SenderAgent):
@@ -11,12 +12,15 @@ class ImageCaptioner(SenderAgent):
         """
         self.image_captions = tf.placeholder(tf.int32, shape=(self.batch_size, self.L))
         super()._build_input()
+        self.helper = tf.contrib.seq2seq.TrainingHelper(tf.one_hot(self.image_captions, self.K), [self.L] * self.batch_size)
+
     
     def _build_losses(self):
         """ 
         Build this agent's loss function
         """
-
+        # TODO - should use TrainingHelper during training and inference helper during validation
+        # Sender agent helper is inference helper
         # TODO - currently using the default softmax function - check for potentially something fancier
         self.loss = tf.contrib.seq2seq.sequence_loss(
             self.rnn_outputs,
@@ -30,7 +34,7 @@ class ImageCaptioner(SenderAgent):
     def _build_optimizer(self):
         self.train_op = tf.contrib.layers.optimize_loss(
             loss=self.loss,
-            global_step=self.epoch,
+            global_step=self.step,
             learning_rate=self.lr,
             optimizer="Adam",
             # some gradient clipping stabilizes training in the beginning.
@@ -48,6 +52,3 @@ class ImageCaptioner(SenderAgent):
 
     def __del__(self):
         self.sess.close()
-    
-    def run_game(self, fd):
-        return self.sess.run([self.train_op, self.accuracy, self.loss], feed_dict=fd)[1:]

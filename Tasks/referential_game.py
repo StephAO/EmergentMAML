@@ -18,16 +18,16 @@ class ReferentialGame:
         Distractor Set Size [Int]
     """
 
-    def __init__(self, K=100, D=15, use_images=True, loss_type='pairwise', track_results=True):
+    def __init__(self, K, D, L, use_images=True, loss_type='pairwise', track_results=True):
         """
         :param K [Int]: Vocabulary Size
         :param D [Int]: Distractor Set Size
         :param use_images[Bool]: Whether to use images or one hot encoding (for debugging)
         """
         self.use_images = use_images
-        self.sender = SenderAgent(K, D, use_images=use_images)
+        self.sender = SenderAgent(K, D, L, use_images=use_images)
         recv_msg, hum_msg, msg_len = self.sender.get_output()
-        self.receiver = ReceiverAgent(K, D, recv_msg, msg_len, use_images=use_images, loss_type=loss_type)
+        self.receiver = ReceiverAgent(K, D, L, recv_msg, msg_len, use_images=use_images, loss_type=loss_type)
         if use_images:
             self.dh = dh.Data_Handler()
         self.batch_size = Agent.batch_size
@@ -44,7 +44,7 @@ class ReferentialGame:
 
         self.experiment.log_multiple_params(Agent.get_params())
 
-    def play_epoch(self, e, data_type="train"):
+    def train_epoch(self, e, data_type="train"):
         """
         Play an epoch of a game defined by iterating over of each image of the dataset once (within a margin)
         For not using images, this is identical of play_game
@@ -60,7 +60,7 @@ class ReferentialGame:
         while True:
             try:
                 images = next(image_gen)
-                acc, loss = self.play_game(images=images, data_type=data_type)
+                acc, loss = self.train_batch(images=images, data_type=data_type)
                 losses.append(loss)
                 accuracies.append(acc)
             except StopIteration:
@@ -75,7 +75,7 @@ class ReferentialGame:
 
         return avg_acc, avg_loss
 
-    def play_game(self, images=None, data_type="train"):
+    def train_batch(self, images=None, data_type="train"):
         """
         Play a single instance of the game
         :return:
@@ -98,7 +98,7 @@ class ReferentialGame:
         self.sender.fill_feed_dict(fd, target)
         self.receiver.fill_feed_dict(fd, candidates, target_indices)
 
-        message, accuracy, loss, step = self.receiver.run_game(fd, data_type=data_type)
+        accuracy, loss, prediction, step = self.receiver.run_game(fd, data_type=data_type)
 
         if data_type == "train":
             self.experiment.set_step(step)

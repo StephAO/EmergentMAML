@@ -9,12 +9,12 @@ class Agent:
     # GAME PARAMETERS
     K = None
     D = None
-    L = 3  # Maximum message length
+    L = None  # Maximum message length
 
     # MODEL PARAMETERS
     freeze_cnn = True
     num_hidden = 512
-    batch_size = 64
+    batch_size = 128
     batch_shape = (batch_size, img_h, img_w, 3)
 
     # TRAINING PARAMETERS
@@ -56,7 +56,7 @@ class Agent:
 
         return params
 
-    def __init__(self, vocab_size, num_distractors, use_images=False, loss_type='pairwise', freeze_cnn=True,
+    def __init__(self, vocab_size, num_distractors, max_len, loss_type='pairwise', use_images=True, freeze_cnn=True,
                  track_results=True):
         """
         Base agent, also currently holds a lot of hyper parameters
@@ -69,6 +69,7 @@ class Agent:
         # GAME PARAMETERS
         Agent.K = vocab_size
         Agent.D = num_distractors
+        Agent.L = max_len
         self.use_images = use_images
 
         # MODEL PARAMETERS
@@ -81,8 +82,8 @@ class Agent:
         # TODO: properly define start/end tokens
         # Currently setting start token to [1, 0, 0, ...., 0]
         # And end token to [0, 1, 0, 0, ..., 0]
-        self.sos_token = tf.one_hot(0, self.K)
-        self.eos_token = tf.one_hot(1, self.K)
+        self.sos_token = tf.one_hot(0, Agent.K)
+        self.eos_token = tf.one_hot(1, Agent.K)
 
         # Debugging so that OOM error happens on the line it is created instead of always on the session.run() call
         gpu_options = tf.GPUOptions(allow_growth=True)
@@ -148,7 +149,7 @@ class Agent:
         return self.output
 
     def run_game(self, fd, data_type="train"):
-        ops = [self.message, self.accuracy, self.loss, self.step]
+        ops = [self.accuracy, self.loss, self.prediction, self.step]
         if data_type == "train":
             ops += [self.train_op]
         return self.sess.run(ops, feed_dict=fd)[:4]

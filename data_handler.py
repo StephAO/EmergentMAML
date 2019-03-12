@@ -11,14 +11,14 @@ img_w = 96
 class Data_Handler:
 
     def __init__(self, dataset=None):
-        self.data_dir = '/h/stephaneao/cocoapi'
+        self.data_dir = '/home/stephane/cocoapi'
         self.dataType = 'train2014'
         self.data_file = '{}/annotations/instances_{}.json'.format(self.data_dir, self.dataType)
         self.caption_file = '{}/annotations/captions_{}.json'.format(self.data_dir, self.dataType)
         # initialize COCO api for image and instance annotations
         self.coco = COCO(self.data_file)
         # Uncomment to enable captions
-        # self.coco_capts = COCO(self.caption_file)
+        self.coco_capts = COCO(self.caption_file)
         # COCO categories
         # self.cats = self.coco.loadCats(self.coco.getCatIds())
         self.cat_ids = self.coco.getCatIds()
@@ -45,8 +45,6 @@ class Data_Handler:
         self.train = {}
         self.val = {}
 
-        empty = 0
-
         for img_id in all_img_ids:
             ann_id = self.coco.getAnnIds(img_id)
             anns = self.coco.loadAnns(ann_id)
@@ -70,12 +68,10 @@ class Data_Handler:
             self.train[cat] = self.all[cat][:split_idx]
             self.val[cat] = self.all[cat][split_idx:]
 
-        print("time taken: ", time.time() - st)
-
     def print_progress(self, generated, total):
         print("\r[{0:5.2f}%]".format(float(generated) / float(total) * 100), end="")
 
-    def get_images(self, images_per_instance=1, batch_size=1, captions=False, data_type="train"):
+    def get_images(self, images_per_instance=1, batch_size=1, return_captions=False, data_type="train"):
         """
         Return batches of images from the MSCOCO dataset and their respective captions if "captions" is True
         :param num_batches[Int]: number of batches to return
@@ -110,7 +106,7 @@ class Data_Handler:
 
                 gen = enumerate(cat_ids) if self.group else range(images_per_instance)
 
-                annotations = []
+                captions = []
                 for i in gen:
                     if self.group:
                         i, cat = i
@@ -127,9 +123,6 @@ class Data_Handler:
                     # Increase channels (by copying) of bw images that don't have 3 channels
                     while img.shape[-1] != 3:
                         img = np.repeat(img[:, :, np.newaxis], 3, axis=2)
-                        # plt.axis('off')
-                        # plt.imshow(img)
-                        # plt.show()
 
                     img = transform.resize(img, (img_h, img_w), anti_aliasing=True, mode='reflect')
 
@@ -138,15 +131,16 @@ class Data_Handler:
                     # plt.show()
 
                     img_batches[i, b] = img
-                    if captions:
+                    if return_captions:
                         ann_id = self.coco_capts.getAnnIds(imgIds=img_id)
                         anns = self.coco_capts.loadAnns(ann_id)
-                        annotations.append(anns)
+                        for a in anns:
+                            captions.append(a['caption'])
 
-                if captions:
-                    cap_batches.append(annotations)
+                if return_captions:
+                    cap_batches.append(captions)
 
-            ret = (img_batches, cap_batches) if captions else img_batches
+            ret = (img_batches, cap_batches) if return_captions else img_batches
             generated += images_per_batch
             self.print_progress(generated, total)
             yield ret

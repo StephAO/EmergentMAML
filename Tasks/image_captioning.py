@@ -1,126 +1,145 @@
+from comet_ml import Experiment
 import matplotlib.pyplot as plt
 import numpy as np
 
 import data_handler as dh
 from Agents.image_captioner import ImageCaptioner
+from Agents.agent import Agent
 import string
 from utils.vocabulary import Vocabulary as V
+
+import tensorflow as tf
 
 
 class ImageCaptioning:
     """
     Class for running the image captioner
     """
-    def __init__(self, K=500, L=15):
+    def __init__(self, K, L, track_results=True):
         """ 
         Initialize this Image Captioning task
         """
         self.L = L
         self.K = K
 
-        
         self.dh = dh.Data_Handler()
-        # TODO - (1) need to get annotations to construct vocabulary --> find a better way
-        # TODO - (2) Since I don't know in advance which images will be used for all the batches, I construct the vocab using a subset of images
         
         self.V = V()
         self.V.load_vocab()
         self.vocabulary, self.reverse_vocabulary = self.V.get_top_k(K)
         
-        self.image_captioner = ImageCaptioner(self.K, 0, use_images=True)
-        self.batch_size = self.image_captioner.batch_size
-        
-    def train(self):
+        self.image_captioner = ImageCaptioner(K, 0, L, use_images=True)
+        self.batch_size = Agent.batch_size
+
+        self.train_metrics = {}
+        self.val_metrics = {}
+        self.experiment = Experiment(api_key='1jl4lQOnJsVdZR6oekS6WO5FI',
+                                     project_name='Emergent_MAML',
+                                     auto_param_logging=False, auto_metric_logging=False,
+                                     disabled=(not track_results))
+
+        self.experiment.log_multiple_params(Agent.get_params())
+
+    def train_epoch(self, e, data_type="train"):
         """
-        Run the Image captioing to learn parameters
+        Play an epoch of a game defined by iterating over of each image of the dataset once (within a margin)
+        For not using images, this is identical of play_game
+        :return:
+        """
+        losses = []
+        accuracies = []
+
+        image_gen = self.dh.get_images(images_per_instance=1, batch_size=self.batch_size, return_captions=True,
+                                       data_type=data_type)
+        while True:
+            try:
+                images, captions = next(image_gen)
+                acc, loss = self.train_batch(images[0], captions, data_type=data_type)
+                losses.append(loss)
+                accuracies.append(acc)
+            except StopIteration:
+                break
+
+        avg_acc, avg_loss  = np.mean(accuracies), np.mean(losses)
+        if data_type == "val":
+            self.experiment.set_step(e)
+            self.val_metrics["Validation Accuracy"] = avg_acc
+            self.val_metrics["Validation Loss"] = avg_loss
+            self.experiment.log_multiple_metrics(self.val_metrics)
+
+        return avg_acc, avg_loss
+
+    def train_batch(self, images, captions, data_type="train"):
+        """
+        Run the Image captioning to learn parameters
         """
         fd = {}
-        
-        imgs, captions = self.dh.get_images(
-            imgs_per_batch=1, num_batches=self.batch_size, return_captions=True)
 
-        imgs = imgs[0]
-            
-        captions = self.get_caption_vector(captions)
+        captions = self.get_useable_captions(captions)
 
-        self.image_captioner.fill_feed_dict(fd, imgs, captions)
-        accuracy, loss = self.image_captioner.run_game(fd)
-        #
-        # # TODO - why did prediction have the shape [caption_len, batch_size] and not the other way around?
-        # accuracy = np.divide(np.sum(np.equal(prediction.T, captions)), np.float(self.batch_size))
-        #
-        return loss, accuracy
+        self.image_captioner.fill_feed_dict(fd, images, captions)
+        accuracy, loss, prediction, step = self.image_captioner.run_game(fd, data_type=data_type)
+
+        if data_type == "train":
+            self.experiment.set_step(step)
+            self.train_metrics["Training Accuracy"] = accuracy
+            self.train_metrics["Training Loss"] = loss
+            self.experiment.log_multiple_metrics(self.train_metrics)
+        elif data_type == "val" and False:
+            print(self.ids_to_tokens(prediction.T[0]))
+            img = images[0]
+            plt.axis('off')
+            plt.imshow(img)
+            plt.show()
+
+        return accuracy, loss
 
     def get_id(self, token):
         """
         Return the id given the corresponding token
         """
         return self.vocabulary.get(token, self.V.unk_id)
+
     def get_token(self, id):
         """
         Return the token given the corresponding id
         """
         return self.reverse_vocabulary.get(id, self.V.unk)
 
-    def get_caption_vector(self, in_captions):
-        """
-        Get the vector associated with the caption of maximum length L
-        L must be at least 3 (eos and sos and 1 token)
-        """
-        # Pad with eos if too short
-        captions = np.full((self.image_captioner.batch_size, self.L), self.V.eos_id)
+    def get_useable_captions(self, in_captions):
+
+        captions = np.zeros((self.image_captioner.batch_size, self.L))
 
         for i, caption in enumerate(in_captions):
+            # Randomly select caption to use
             chosen_caption = caption[np.random.randint(5)]
             tokens = chosen_caption.translate(str.maketrans('', '', string.punctuation))
             tokens = tokens.lower().split()
-            for j, tok in enumerate(tokens):
-                # Truncate captions if too long
-                if j >= self.L - 1:
-                    break
-                captions[i, j] = self.get_id(tok)
+            captions[i] = self.tokens_to_ids(tokens)
 
-        return captions
-        
-if __name__ == "__main__":
-    # For testing the image captioner on its own
-    epochs = 10000
-    
-    ic = ImageCaptioning()
-    
-    losses = []
-    accuracies = []
-    for e in range(1, epochs + 1):
-        loss, acc = ic.train()
+            return captions
 
-        # Print and collect stats
-        if (e) % 20 == 0:
-            print("loss: {0:1.4f}, accuracy: {1:3.2f}%".format(np.mean(losses[-20:]), np.mean(accuracies[-20:])*100))
-        if e % 100 == 0:
-            print("--- EPOCH {0:5d} ---".format(e))
-        losses.append(loss)
-        accuracies.append(acc)
 
-        # 100% Success - end training
-        if np.mean(accuracies[-20:]) == 1.0:
-            break
+    def tokens_to_ids(self, tokens):
+        """
+        Map a sequence of tokens to ids
+        """
+        # Pad with eos if too short
+        ids = np.full((self.L), self.V.eos_id)
 
-    print("--- EPOCH {0:5d} ---".format(e))
-    ml = max(losses)
-    losses_ = [l / ml for l in losses]
-    accuracies_ = [np.mean(accuracies[i: i + 10]) for i in range(len(accuracies) - 10)]
-    
-    plt.plot(losses_, 'r', accuracies_, 'g')  # , lrs, 'b')
-    # plt.show()
-    plt.savefig("./output_graph.png")
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+        for j, tok in enumerate(tokens):
+            # Truncate captions if too long (leave at least one eos tokens)
+            if j >= self.L - 1:
+                break
+            ids[j] = self.get_id(tok)
+        return ids
+
+    def ids_to_tokens(self, ids):
+        """
+        Map a sequence of ids to tokens
+        """
+        # Pad with eos if too short
+        tokens = []
+        for id in ids:
+            tokens.append(self.get_token(id))
+        return ' '.join(tokens)

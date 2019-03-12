@@ -5,10 +5,10 @@ import tensorflow_probability as tfp
 
 class SenderAgent(Agent):
 
-    def __init__(self, vocab_size, num_distractors, use_images):
+    def __init__(self, *args, **kwargs):
         # TODO define temperature better - maybe learnt temperature?
         with tf.variable_scope("sender"):
-            super().__init__(vocab_size, num_distractors, use_images=use_images)
+            super().__init__(*args, **kwargs)
 
 
     def _build_input(self):
@@ -37,13 +37,15 @@ class SenderAgent(Agent):
         # Determines input to decoder at next time step
         # TODO: define a end_fn that actually has a chance of triggering so that we can variable len messages
         # TODO do this better
-        self.sample_fn = lambda outputs: tf.one_hot(tf.squeeze(tf.random.multinomial(tf.log(tf.nn.softmax(outputs)), 1)), Agent.K, axis=1)
+        self.sample_fn = lambda outputs: outputs #tf.one_hot(tf.squeeze(tf.random.multinomial(tf.log(tf.nn.softmax(outputs)), 1)), Agent.K, axis=1)
+        self.next_inputs_fn = lambda outputs: tf.one_hot(tf.squeeze(tf.random.multinomial(tf.log(tf.nn.softmax(outputs)), 1)), Agent.K, axis=1)
         self.helper = tf.contrib.seq2seq.InferenceHelper(sample_fn=self.sample_fn,
                                                          sample_shape=[Agent.K],
                                                          sample_dtype=tf.float32,
                                                          start_inputs=self.starting_tokens,
                                                          end_fn=lambda sample_ids:
-                                                            tf.reduce_all(tf.equal(sample_ids, self.eos_token))
+                                                            tf.reduce_all(tf.equal(sample_ids, self.eos_token)),
+                                                         next_inputs_fn = self.next_inputs_fn
                                                          )
 
     def _build_output(self):
