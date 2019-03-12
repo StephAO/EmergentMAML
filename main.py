@@ -4,39 +4,51 @@ import matplotlib.pyplot as plt
 import numpy as np
 from Tasks import referential_game
 
-def main(epochs=10000, D=1, K=100, use_images=True, loss_type='pairwise'):
+def converged(losses, precision=0.0001, prev_n=3):
+    """
+    Checks the last prev_n entries are in the precision threshold in a list of losses to see if it's converged
+    :param losses [list]: losses to check on
+    :param precision [float]: how similar the losses have to be to demonstrate convergence
+    :param prev_n[int]: number of losses in a row which have to be in the precision threshold
+    :return [Bool]: True if converged, else False
+    """
+    if len(losses) < prev_n:
+        return False
+
+    for i in range(len(losses) - prev_n, len(losses) - 1):
+        if abs(losses[i] - losses[i + 1]) > precision:
+            return False
+
+    return True
+
+def main(epochs=10, D=7, K=500, use_images=True, loss_type='pairwise'):
     """
     Run epochs of games
     :return:
     """
-    rg = referential_game.Referential_Game(K=K, D=D, use_images=use_images, 
-        loss_type=loss_type)
+    rg = referential_game.ReferentialGame(K=K, D=D, use_images=use_images, loss_type=loss_type)
+
     losses = []
-    accuracies = []
+
+    # Starting point
+    print("Validating epoch 0:")
+    accuracy, loss = rg.play_epoch(0, data_type="val")
+    print("\rloss: {0:1.4f}, accuracy: {1:5.2f}%".format(loss, accuracy * 100), end="\n")
+
+    # Start training
     for e in range(1, epochs + 1):
-        loss, acc = rg.play_game(e)
-
-        # Print and collect stats
-        if (e) % 20 == 0:
-            print("loss: {0:1.4f}, accuracy: {1:3.2f}%".format(np.mean(losses[-20:]), np.mean(accuracies[-20:])*100))
-        if e % 100 == 0:
-            print("--- EPOCH {0:5d} ---".format(e))
+        print("Training epoch {0}".format(e))
+        accuracy, loss = rg.play_epoch(e, data_type="train")
+        print("\rloss: {0:1.4f}, accuracy: {1:5.2f}%".format(loss, accuracy * 100), end="\n")
+        print("Validating epoch {0}".format(e))
+        accuracy, loss = rg.play_epoch(e, data_type="val")
+        print("\rloss: {0:1.4f}, accuracy: {1:5.2f}%".format(loss, accuracy * 100), end="\n")
         losses.append(loss)
-        accuracies.append(acc)
 
-        # 100% Success - end training
-        if np.mean(accuracies[-20:]) == 1.0:
+        # End training if 100% communication rate or convergence reached on loss
+        if accuracy == 1.0 or converged(losses):
             break
 
-    print("--- EPOCH {0:5d} ---".format(e))
-    ml = max(losses)
-    losses_ = [l / ml for l in losses]
-    accuracies_ = [np.mean(accuracies[i: i + 10]) for i in range(len(accuracies) - 10)]
-    
-    plt.plot(losses_, 'r', accuracies_, 'g')  # , lrs, 'b')
-    # plt.show()
-    
-    plt.savefig("./output_graph.png")
 
 def bool_type(val):
     """

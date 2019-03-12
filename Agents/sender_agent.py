@@ -7,8 +7,8 @@ class SenderAgent(Agent):
 
     def __init__(self, vocab_size, num_distractors, use_images):
         # TODO define temperature better - maybe learnt temperature?
-        self.temperature = 5.
-        super().__init__(vocab_size, num_distractors, use_images=use_images)
+        with tf.variable_scope("sender"):
+            super().__init__(vocab_size, num_distractors, use_images=use_images)
 
 
     def _build_input(self):
@@ -21,23 +21,25 @@ class SenderAgent(Agent):
         """
         if self.use_images:
             # Determine starting state
-            self.target_image = tf.placeholder(tf.float32, shape=(self.batch_size, img_h, img_w, 3))
+            self.target_image = tf.placeholder(tf.float32, shape=(Agent.batch_size, img_h, img_w, 3))
             self.pre_feat = Agent.pre_trained(self.target_image)
             if self.freeze_cnn:
                 self.pre_feat = tf.stop_gradient(self.pre_feat)
-            self.pre_feat = self.pre_feat / tf.maximum(tf.reduce_max(self.pre_feat, axis=1, keepdims=True), self.epsilon)
+            self.pre_feat = self.pre_feat / tf.maximum(tf.reduce_max(self.pre_feat, axis=1, keepdims=True), Agent.epsilon)
 
         else: # Use one-hot encoding
-            self.target_image = tf.placeholder(tf.int32, shape=(self.batch_size))
-            self.pre_feat = tf.one_hot(self.target_image, self.D+1)
+            self.target_image = tf.placeholder(tf.int32, shape=(Agent.batch_size))
+            self.pre_feat = tf.one_hot(self.target_image, Agent.D+1)
 
         self.s0 = Agent.img_fc(self.pre_feat)
 
-        self.starting_tokens = tf.stack([self.sos_token] * self.batch_size)
+        self.starting_tokens = tf.stack([self.sos_token] * Agent.batch_size)
         # Determines input to decoder at next time step
         # TODO: define a end_fn that actually has a chance of triggering so that we can variable len messages
-        self.helper = tf.contrib.seq2seq.InferenceHelper(sample_fn=lambda outputs: outputs,
-                                                         sample_shape=[self.K],
+        # TODO do this better
+        self.sample_fn = lambda outputs: tf.one_hot(tf.squeeze(tf.random.multinomial(tf.log(tf.nn.softmax(outputs)), 1)), Agent.K, axis=1)
+        self.helper = tf.contrib.seq2seq.InferenceHelper(sample_fn=self.sample_fn,
+                                                         sample_shape=[Agent.K],
                                                          sample_dtype=tf.float32,
                                                          start_inputs=self.starting_tokens,
                                                          end_fn=lambda sample_ids:
@@ -50,7 +52,7 @@ class SenderAgent(Agent):
         :return:
         """
         # Used to map RNN output to RNN input
-        output_to_input = tf.layers.Dense(self.K, #activation=lambda x: tf.nn.softmax,
+        output_to_input = tf.layers.Dense(Agent.K, #activation=lambda x: tf.nn.softmax,
                                           kernel_initializer=tf.glorot_uniform_initializer)
 
         # Decoder
@@ -58,7 +60,7 @@ class SenderAgent(Agent):
                                                        output_layer=output_to_input)
 
         self.rnn_outputs, self.final_state, self.final_sequence_lengths = \
-            tf.contrib.seq2seq.dynamic_decode(self.decoder, output_time_major=True, maximum_iterations=self.L)
+            tf.contrib.seq2seq.dynamic_decode(self.decoder, output_time_major=True, maximum_iterations=Agent.L)
 
         # Select rnn_outputs from rnn_outputs: see
         # https://www.tensorflow.org/api_docs/python/tf/contrib/seq2seq/BasicDecoderOutput
@@ -68,7 +70,7 @@ class SenderAgent(Agent):
         # self.temperature = tf.clip_by_value(10000. / tf.cast(self.epoch, tf.float32), 0.5, 10.)
 
         # Gumbel Softmax TODO: use gumbel softmax straight through used in https://arxiv.org/abs/1705.11192
-        self.dist = tfp.distributions.RelaxedOneHotCategorical(self.temperature, logits=self.rnn_outputs)
+        self.dist = tfp.distributions.RelaxedOneHotCategorical(Agent.temperature, logits=self.rnn_outputs)
         self.output = self.dist.sample()
         self.prediction = tf.argmax(self.output, axis=2, output_type=tf.int32)
 
