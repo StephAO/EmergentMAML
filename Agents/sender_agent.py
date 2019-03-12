@@ -70,10 +70,10 @@ class SenderAgent(Agent):
         # Gumbel Softmax TODO: use gumbel softmax straight through used in https://arxiv.org/abs/1705.11192
         self.dist = tfp.distributions.RelaxedOneHotCategorical(self.temperature, logits=self.rnn_outputs)
         self.output = self.dist.sample()
-        self.output_symbol = tf.argmax(self.output, axis=2)
+        self.prediction = tf.argmax(self.output, axis=2, output_type=tf.int32)
 
     def get_output(self):
-        return self.output, self.output_symbol, self.final_sequence_lengths
+        return self.output, self.prediction, self.final_sequence_lengths
 
     def fill_feed_dict(self, feed_dict, target_image):
         feed_dict[self.target_image] = target_image

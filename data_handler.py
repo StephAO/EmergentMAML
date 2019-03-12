@@ -10,7 +10,7 @@ img_w = 96
 class Data_Handler:
 
     def __init__(self, dataset=None):
-        self.data_dir = '/home/marina/coco'
+        self.data_dir = '/home/stephane/cocoapi'
         self.dataType = 'train2014'
         self.data_file = '{}/annotations/instances_{}.json'.format(self.data_dir, self.dataType)
         self.caption_file = '{}/annotations/captions_{}.json'.format(self.data_dir, self.dataType)
@@ -22,7 +22,7 @@ class Data_Handler:
         self.cats = self.coco.loadCats(self.coco.getCatIds())
         self.catIds = self.coco.getCatIds() #catNms=["elephant", "airplane"])
 
-    def get_images(self, imgs_per_batch=1, num_batches=1, captions=False):
+    def get_images(self, imgs_per_batch=1, num_batches=1, return_captions=False):
         """
         Return batches of images from the MSCOCO dataset and their respective captions if "captions" is True
         :param num_batches[Int]: number of batches to return
@@ -38,7 +38,7 @@ class Data_Handler:
             cat_idxs = np.random.randint(len(self.catIds), size=imgs_per_batch)
             catIds = [self.catIds[i] for i in cat_idxs]
 
-            annotations = []
+            captions = []
             for i, cat in enumerate(catIds):
                 # catId = self.coco.getCatIds(catNms=[cat["name"]])
                 imgIds = self.coco.getImgIds(catIds=cat)#["id"])
@@ -65,13 +65,14 @@ class Data_Handler:
                 # plt.show()
 
                 img_batches[i, b] = img
-                if captions:
+                if return_captions:
                     annIds = self.coco_capts.getAnnIds(imgIds=[imgId])
                     anns = self.coco_capts.loadAnns(annIds)
-                    annotations.append(anns)
+                    for a in anns:
+                        captions.append(a['caption'])
 
-            if captions:
-                cap_batches.append(annotations)
+            if return_captions:
+                cap_batches.append(captions)
 
-        ret = (img_batches, cap_batches) if captions else img_batches
+        ret = (img_batches, cap_batches) if return_captions else img_batches
         return ret
