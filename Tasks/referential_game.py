@@ -1,10 +1,10 @@
+import numpy as np
 from comet_ml import Experiment
+
 from Agents.agent import Agent
 from Agents.receiver_agent import ReceiverAgent
 from Agents.sender_agent import SenderAgent
-import data_handler as dh
-import matplotlib.pyplot as plt
-import numpy as np
+from utils import data_handler as dh
 
 
 class ReferentialGame:

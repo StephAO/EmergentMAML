@@ -1,8 +1,10 @@
 from collections import Counter
 import numpy as np
+import os
 import pickle
 from pycocotools.coco import COCO
 import string
+import sys
 
 class Vocabulary:
     def __init__(self):
@@ -28,9 +30,16 @@ class Vocabulary:
         self.coco_caption_file = '{}/annotations/captions_{}.json'.format(self.coco_data_dir, self.coco_dataType)
 
         # Load/Save
-        self.vocab_dir = '/home/stephane/PycharmProjects/EmergentMAML/data/'
+        self.base_dir = os.path.dirname(sys.modules['__main__'].__file__)
+        self.data_dir = self.base_dir + '/data/'
+        if not os.path.exists(self.data_dir):
+            os.makedirs(self.data_dir)
 
     def generate_vocab(self):
+        """
+        Generate vocabulary counter dictionary from MSCOCO dataset. Counts the occurences of each token found
+        :return:
+        """
         # The actual vocabulary
         self.vocabulary_counter = {}  # tok -> number of times it appears in all captions
 
@@ -39,7 +48,6 @@ class Vocabulary:
 
         all_anns_ids = self.coco_capts.getAnnIds()
         for ann_id in all_anns_ids:
-
             ann = self.coco_capts.loadAnns(ann_id)[0]
             tokens = ann['caption'].translate(str.maketrans('', '', string.punctuation))
             tokens = tokens.lower().split()
@@ -48,16 +56,24 @@ class Vocabulary:
                     continue
                 self.vocabulary_counter[tok] = self.vocabulary_counter.get(tok, 0) + 1
 
+        print("Created vocabulary with {} different tokens".format(len(self.vocabulary_counter)))
+
 
     def save_vocab(self):
-        with open(self.vocab_dir + 'vocabulary_counter.p', 'wb+') as vc:
+        with open(self.data_dir + 'vocabulary_counter.p', 'wb+') as vc:
             pickle.dump(self.vocabulary_counter, vc)
 
     def load_vocab(self):
-        with open(self.vocab_dir + 'vocabulary_counter.p', 'rb') as vc:
+        with open(self.data_dir + 'vocabulary_counter.p', 'rb') as vc:
             self.vocabulary_counter = pickle.load(vc)
 
     def get_top_k(self, k):
+        """
+        Returns a dictionary with start of sentence, end of sentence, unknown tokens + (k-3) most common tokens from the
+        generated dictionary (see generate_vocab)
+        :param k:
+        :return:
+        """
         # Add the start of sentence, end of sentence, and unknown tokens
         self.vocabulary[self.sos] = self.sos_id
         self.vocabulary[self.eos] = self.eos_id

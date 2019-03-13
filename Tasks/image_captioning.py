@@ -1,14 +1,13 @@
-from comet_ml import Experiment
+import string
+
 import matplotlib.pyplot as plt
 import numpy as np
+from comet_ml import Experiment
 
-import data_handler as dh
-from Agents.image_captioner import ImageCaptioner
 from Agents.agent import Agent
-import string
+from Agents.image_captioner import ImageCaptioner
+from utils import data_handler as dh
 from utils.vocabulary import Vocabulary as V
-
-import tensorflow as tf
 
 
 class ImageCaptioning:
@@ -25,7 +24,11 @@ class ImageCaptioning:
         self.dh = dh.Data_Handler()
         
         self.V = V()
-        self.V.load_vocab()
+        try:
+            self.V.load_vocab()
+        except FileNotFoundError:
+            self.V.generate_vocab()
+            self.V.save_vocab()
         self.vocabulary, self.reverse_vocabulary = self.V.get_top_k(K)
         
         self.image_captioner = ImageCaptioner(K, 0, L, use_images=True)
@@ -118,7 +121,6 @@ class ImageCaptioning:
             captions[i] = self.tokens_to_ids(tokens)
 
             return captions
-
 
     def tokens_to_ids(self, tokens):
         """

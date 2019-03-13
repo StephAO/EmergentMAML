@@ -1,7 +1,9 @@
-from Agents.agent import Agent
-from data_handler import img_h, img_w
 import tensorflow as tf
 import tensorflow_probability as tfp
+
+from Agents.agent import Agent
+from utils.data_handler import img_h, img_w
+
 
 class SenderAgent(Agent):
 

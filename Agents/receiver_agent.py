@@ -1,7 +1,7 @@
-from Agents.agent import Agent
-from data_handler import img_w, img_h
-import numpy as np
 import tensorflow as tf
+
+from Agents.agent import Agent
+from utils.data_handler import img_w, img_h
 
 
 def cosine_similarity(a, b, axis=1):
