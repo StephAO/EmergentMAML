@@ -6,6 +6,7 @@ from utils.data_handler import img_w, img_h
 class Agent:
     """
     Abstract base class for all agents - eventually the weights contained here will be the weights trained using MAML
+    WARNING: must set parameters before creating any agents
     """
     # GAME PARAMETERS
     K = None
@@ -22,22 +23,46 @@ class Agent:
     step = tf.train.get_or_create_global_step()
     lr = 0.001  # self._cyclicLR() #0.005
     gradient_clip = 10.0
-    temperature = 5.
+    temperature = 2.
     loss_type = None
 
     # OTHER
     epsilon = 1e-12
 
-    with tf.variable_scope("MAML"):
-    #  Shared CNN pre-trained on imagenet, see https://github.com/keras-team/keras-applications for other options
-        pre_trained = tf.keras.applications.mobilenet_v2.MobileNetV2(include_top=False, weights='imagenet', pooling='max',
-                                                                     input_shape=(img_h, img_w, 3))
-        # Shared image fc layer
-        img_fc = tf.keras.layers.Dense(num_hidden, activation=tf.nn.tanh,
-                                       kernel_initializer=tf.glorot_uniform_initializer)
+    # Debugging so that OOM error happens on the line it is created instead of always on the session.run() call
+    gpu_options = tf.GPUOptions(allow_growth=True)
+    # Create session
+    sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
 
-        # Shared GRU cell
-        gru_cell = tf.nn.rnn_cell.GRUCell(num_hidden, kernel_initializer=tf.random_normal_initializer)
+    #  Shared CNN pre-trained on imagenet, see https://github.com/keras-team/keras-applications for other options
+    pre_trained = tf.keras.applications.mobilenet_v2.MobileNetV2(include_top=False, weights='imagenet', pooling='max',
+                                                                 input_shape=(img_h, img_w, 3))
+
+    # Shared image fc layer
+    img_fc = tf.keras.layers.Dense(num_hidden, activation=tf.nn.tanh,
+                                   kernel_initializer=tf.glorot_uniform_initializer)
+    # img_fc = tf.make_template("img_fc", img_fc)
+    # img_fc.name = "shared_fc"
+    # Shared GRU cell
+    gru_cell = tf.nn.rnn_cell.GRUCell(num_hidden, kernel_initializer=tf.random_normal_initializer,
+                                      name="shared_gru")#, reuse=tf.AUTO_REUSE)
+
+    # list to store MAML layers
+    layers = [img_fc, gru_cell]
+
+    @staticmethod
+    def set_params(K=None, D=None, L=None, lr=None, loss_type=None, batch_size=None, num_hidden=None, temperature=None):
+        """
+        Sets agent parameters. Call this before initializing any agent
+        """
+        Agent.K = K or Agent.K
+        Agent.L = L or Agent.L
+        Agent.D = D or Agent.D
+        Agent.lr = lr or Agent.lr
+        Agent.loss_type = loss_type or Agent.loss_type
+        Agent.batch_size = batch_size or Agent.batch_size
+        Agent.num_hidden = num_hidden or Agent.num_hidden
+        Agent.temperature = temperature or Agent.temperature
 
     @staticmethod
     def get_params():
@@ -57,8 +82,18 @@ class Agent:
 
         return params
 
-    def __init__(self, vocab_size, num_distractors, max_len, loss_type='pairwise', use_images=True, freeze_cnn=True,
-                 track_results=True):
+    @classmethod
+    def get_weights(cls):
+        """
+        returns a list of all weights shared by all agents
+        :return:
+        """
+        weights = []
+        for l in cls.layers:
+            weights.extend(l.weights)
+        return weights
+
+    def __init__(self, use_images=True):
         """
         Base agent, also currently holds a lot of hyper parameters
         :param vocab_size:
@@ -66,19 +101,11 @@ class Agent:
         :param use_images:
         :param loss_type:
         """
+        if not (Agent.K and Agent.L and Agent.D):
+            raise ValueError("Set static agent parameters using Agent.set_params() before creating any agent instances")
+
         # TODO deal with hyper parameters better
-        # GAME PARAMETERS
-        Agent.K = vocab_size
-        Agent.D = num_distractors
-        Agent.L = max_len
         self.use_images = use_images
-
-        # MODEL PARAMETERS
-        Agent.freeze_cnn = freeze_cnn
-
-        # TRAINING PARAMETERS
-        Agent.loss_type = loss_type
-        self.step = tf.train.get_or_create_global_step()
 
         # TODO: properly define start/end tokens
         # Currently setting start token to [1, 0, 0, ...., 0]
@@ -86,10 +113,8 @@ class Agent:
         self.sos_token = tf.one_hot(0, Agent.K)
         self.eos_token = tf.one_hot(1, Agent.K)
 
-        # Debugging so that OOM error happens on the line it is created instead of always on the session.run() call
-        gpu_options = tf.GPUOptions(allow_growth=True)
-        # Create session
-        self.sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
+        # All agents need a train_op
+        self.train_op = None
 
         # Build model
         self._build_input()
@@ -99,7 +124,7 @@ class Agent:
         self._build_optimizer()
 
         # Initialize
-        self.sess.run(tf.global_variables_initializer())
+        Agent.sess.run(tf.global_variables_initializer())
 
     def _cyclicLR(self):
         """
@@ -146,12 +171,6 @@ class Agent:
     def _build_optimizer(self):
         pass
 
-    def get_output(self):
-        return self.output
-
-    def run_game(self, fd, data_type="train"):
-        ops = [self.accuracy, self.loss, self.prediction, self.step]
-        if data_type == "train":
-            ops += [self.train_op]
-        return self.sess.run(ops, feed_dict=fd)[:4]
+    def get_train_op(self):
+        return self.train_op
 

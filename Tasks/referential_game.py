@@ -1,10 +1,7 @@
 import numpy as np
 from comet_ml import Experiment
 
-from Agents.agent import Agent
-from Agents.receiver_agent import ReceiverAgent
-from Agents.sender_agent import SenderAgent
-from utils import data_handler as dh
+from Agents import Agent
 
 
 class ReferentialGame:
@@ -18,23 +15,28 @@ class ReferentialGame:
         Distractor Set Size [Int]
     """
 
-    def __init__(self, K, D, L, use_images=True, loss_type='pairwise', track_results=True):
+    def __init__(self, Sender, Receiver, data_handler=None, use_images=True, track_results=True):
         """
         :param K [Int]: Vocabulary Size
         :param D [Int]: Distractor Set Size
         :param use_images[Bool]: Whether to use images or one hot encoding (for debugging)
         """
+        self.sender = Sender
+        self.receiver = Receiver
         self.use_images = use_images
-        self.sender = SenderAgent(K, D, L, use_images=use_images)
-        recv_msg, hum_msg, msg_len = self.sender.get_output()
-        self.receiver = ReceiverAgent(K, D, L, recv_msg, msg_len, use_images=use_images, loss_type=loss_type)
-        if use_images:
-            self.dh = dh.Data_Handler()
+
+        self.dh = data_handler
+
+        # Get necessary parameters from Agent
         self.batch_size = Agent.batch_size
+        self.K = Agent.K  # Vocabulary Size
+        self.D = Agent.D  # Distractor Set Size
 
-        self.K = K  # Vocabulary Size
-        self.D = D  # Distractor Set Size
+        # Get necessary ops to run
+        self.run_ops = list(self.receiver.get_output()) + [Agent.step]
+        self.train_ops = [self.sender.get_train_op(), self.receiver.get_train_op()]
 
+        # Set up comet tracking
         self.train_metrics = {}
         self.val_metrics = {}
         self.experiment = Experiment(api_key='1jl4lQOnJsVdZR6oekS6WO5FI',
@@ -44,30 +46,30 @@ class ReferentialGame:
 
         self.experiment.log_multiple_params(Agent.get_params())
 
-    def train_epoch(self, e, data_type="train"):
+    def train_epoch(self, e, mode="train"):
         """
         Play an epoch of a game defined by iterating over of each image of the dataset once (within a margin)
         For not using images, this is identical of play_game
         :return:
         """
         if not self.use_images:
-            return self.play_game(data_type=data_type)
+            return self.train_batch(mode=mode)
 
         losses = []
         accuracies = []
 
-        image_gen = self.dh.get_images(images_per_instance=self.D + 1, batch_size=self.batch_size, data_type=data_type)
+        image_gen = self.dh.get_images(mode=mode)
         while True:
             try:
                 images = next(image_gen)
-                acc, loss = self.train_batch(images=images, data_type=data_type)
+                acc, loss = self.train_batch(images=images, mode=mode)
                 losses.append(loss)
                 accuracies.append(acc)
             except StopIteration:
                 break
 
         avg_acc, avg_loss  = np.mean(accuracies), np.mean(losses)
-        if data_type == "val":
+        if mode == "val":
             self.experiment.set_step(e)
             self.val_metrics["Validation Accuracy"] = avg_acc
             self.val_metrics["Validation Loss"] = avg_loss
@@ -75,7 +77,7 @@ class ReferentialGame:
 
         return avg_acc, avg_loss
 
-    def train_batch(self, images=None, data_type="train"):
+    def train_batch(self, images=None, captions=None, mode="train"):
         """
         Play a single instance of the game
         :return:
@@ -98,14 +100,28 @@ class ReferentialGame:
         self.sender.fill_feed_dict(fd, target)
         self.receiver.fill_feed_dict(fd, candidates, target_indices)
 
-        accuracy, loss, prediction, step = self.receiver.run_game(fd, data_type=data_type)
+        accuracy, loss = self.run_game(fd, mode=mode)
 
-        if data_type == "train":
-            self.experiment.set_step(step)
-            self.train_metrics["Training Accuracy"] = accuracy
-            self.train_metrics["Training Loss"] = loss
-            self.experiment.log_multiple_metrics(self.train_metrics)
 
         return accuracy, loss
+
+    def run_game(self, fd, mode="train"):
+        ops = self.run_ops
+        if mode == "train":
+            ops += self.train_ops
+        elif mode == "sender_train":
+            ops += self.train_ops[0]
+        elif mode == "receiver_train":
+            ops += self.train_ops[1]
+        acc, loss, step = Agent.sess.run(ops, feed_dict=fd)[:3]
+
+        if mode[-5:] == "train":
+            stylized_mode = ' '.join(x.capitalize() for x in mode.split('_'))
+            self.experiment.set_step(step)
+            self.train_metrics[stylized_mode + "ing Accuracy"] = acc
+            self.train_metrics[stylized_mode + "ing Loss"] = loss
+            self.experiment.log_multiple_metrics(self.train_metrics)
+
+        return acc, loss
 
 

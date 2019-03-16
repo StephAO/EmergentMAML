@@ -1,8 +1,13 @@
-import sys
+# TODO use init.py to clean up imports
+from Agents import Agent, SenderAgent, ReceiverAgent, ImageCaptioner
+from Tasks import ReferentialGame, ImageCaptioning
+from utils.data_handler import Data_Handler
 import argparse as ap
 import matplotlib.pyplot as plt
 import numpy as np
-from Tasks import referential_game, image_captioning
+import sys
+
+import tensorflow as tf
 
 def converged(losses, precision=0.0001, prev_n=3):
     """
@@ -21,28 +26,43 @@ def converged(losses, precision=0.0001, prev_n=3):
 
     return True
 
-def main(epochs=10, D=7, K=500, L=15, use_images=True, loss_type='pairwise'):
+def main(epochs=10, task="rg", D=15, K=500, L=1, use_images=True, loss_type='pairwise'):
     """
     Run epochs of games
     :return:
     """
-    # rg = referential_game.ReferentialGame(K=K, D=D, L=L, use_images=use_images, loss_type=loss_type)
-    rg = image_captioning.ImageCaptioning(K=K, L=L)
+    Agent.set_params(K=K, D=D, L=L, loss_type=loss_type)
+    dh = Data_Handler(batch_size=Agent.batch_size, group=False)
+
+    if task.lower() in ["rg", "referential game", "referential_game", "referentialgame"]:
+        s = SenderAgent()
+        r = ReceiverAgent(*s.get_output())
+        s.set_loss(r.get_output()[1])
+        t = ReferentialGame(s, r, dh)
+        dh.set_params(images_per_instance=D + 1)
+    elif task.lower() in ["ic", "image captioning", "image_captioning", "imagecaptioning"]:
+        ic = ImageCaptioner()
+        t = ImageCaptioning(ic, dh)
+    else:
+        raise ValueError("Unknown task {}, select from ['referential_game', 'image_captioning']".format(task))
+
 
     losses = []
 
     # Starting point
-    # print("Validating epoch 0:")
-    # accuracy, loss = rg.train_epoch(0, data_type="val")
-    # print("\rloss: {0:1.4f}, accuracy: {1:5.2f}%".format(loss, accuracy * 100), end="\n")
+    print("Validating epoch 0:")
+    accuracy, loss = t.train_epoch(0, mode="val")
+    print("\rloss: {0:1.4f}, accuracy: {1:5.2f}%".format(loss, accuracy * 100), end="\n")
+
+    summ_writer = tf.summary.FileWriter('/home/stephane/PycharmProjects/EmergentMAML/summaries/', Agent.sess.graph)
 
     # Start training
     for e in range(1, epochs + 1):
         print("Training epoch {0}".format(e))
-        accuracy, loss = rg.train_epoch(e, data_type="train")
+        accuracy, loss = t.train_epoch(e, mode="train")
         print("\rloss: {0:1.4f}, accuracy: {1:5.2f}%".format(loss, accuracy * 100), end="\n")
         print("Validating epoch {0}".format(e))
-        accuracy, loss = rg.train_epoch(e, data_type="val")
+        accuracy, loss = t.train_epoch(e, mode="val")
         print("\rloss: {0:1.4f}, accuracy: {1:5.2f}%".format(loss, accuracy * 100), end="\n")
         losses.append(loss)
 

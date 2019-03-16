@@ -1,8 +1,7 @@
 import tensorflow as tf
 
-from Agents.sender_agent import SenderAgent
-from Agents.agent import Agent
-
+from .agent import Agent
+from .sender_agent import SenderAgent
 
 class ImageCaptioner(SenderAgent):
 
@@ -34,21 +33,24 @@ class ImageCaptioner(SenderAgent):
     def _build_optimizer(self):
         self.train_op = tf.contrib.layers.optimize_loss(
             loss=self.loss,
-            global_step=self.step,
+            global_step=Agent.step,
             learning_rate=self.lr,
             optimizer="Adam",
             # some gradient clipping stabilizes training in the beginning.
-            clip_gradients=self.gradient_clip)
+            clip_gradients=self.gradient_clip,
+            # only update image captioner weights
+            variables=Agent.get_weights() + ImageCaptioner.get_weights()
+        )
 
     def get_output(self):
-        return self.output, self.prediction, self.final_sequence_lengths
+        return self.message, self.prediction, self.final_sequence_lengths
 
     def fill_feed_dict(self, feed_dict, target_image, image_captions):
         feed_dict[self.target_image] = target_image
         feed_dict[self.image_captions] = image_captions
     
     def close(self):
-        self.sess.close()
+        Agent.sess.close()
 
     def __del__(self):
-        self.sess.close()
+        Agent.sess.close()

@@ -10,7 +10,10 @@ img_w = 96
 
 class Data_Handler:
 
-    def __init__(self, dataset=None):
+    def __init__(self, images_per_instance=1, batch_size=1, group=True):
+        self.images_per_instance = images_per_instance
+        self.batch_size = batch_size
+        self.images_per_batch = self.images_per_instance * self.batch_size
         self.data_dir = '/home/stephane/cocoapi'
         self.dataType = 'train2014'
         self.data_file = '{}/annotations/instances_{}.json'.format(self.data_dir, self.dataType)
@@ -24,7 +27,7 @@ class Data_Handler:
         self.cat_ids = self.coco.getCatIds()
 
         self.train_split = 0.95
-        self.group = True
+        self.group = group
         self.split_train_val()
 
     def split_train_val(self):
@@ -68,19 +71,24 @@ class Data_Handler:
             self.train[cat] = self.all[cat][:split_idx]
             self.val[cat] = self.all[cat][split_idx:]
 
+    def set_params(self, images_per_instance=None, batch_size=None):
+        self.images_per_instance = images_per_instance or self.images_per_instance
+        self.batch_size = batch_size or self.batch_size
+        self.images_per_batch = self.images_per_instance * self.batch_size
+
     def print_progress(self, generated, total):
         print("\r[{0:5.2f}%]".format(float(generated) / float(total) * 100), end="")
 
-    def get_images(self, images_per_instance=1, batch_size=1, return_captions=False, data_type="train"):
+    def get_images(self, return_captions=False, mode="train"):
         """
         Return batches of images from the MSCOCO dataset and their respective captions if "captions" is True
         :param num_batches[Int]: number of batches to return
         :param imgs_per_batch[Int]: number of images to per batch return
         :param captions[Bool]: Whether or not to return captions with images
-        :param data_type[str]: "train" or "val" for training or validation set
+        :param mode[str]: "train" or "val" for training or validation set
         :return: a list of images, optionally a list of captions
         """
-        data = self.train if data_type == "train" else self.val
+        data = self.train if mode == "train" else self.val
         generated = 0
         total = 0
         if self.group:
@@ -93,18 +101,18 @@ class Data_Handler:
             data_idx = 0
             np.random.shuffle(data)
 
-        images_per_batch = images_per_instance * batch_size
-        while self.group or data_idx + images_per_batch < len(data):
-            img_batches = np.zeros((images_per_instance, batch_size, img_h, img_w, 3), dtype=np.float32)
+
+        while self.group or data_idx + self.images_per_batch < len(data):
+            img_batches = np.zeros((self.images_per_instance, self.batch_size, img_h, img_w, 3), dtype=np.float32)
             cap_batches = []
-            for b in range(batch_size):
-                if self.group and images_per_instance > len(data_idx):
+            for b in range(self.batch_size):
+                if self.group and self.images_per_instance > len(data_idx):
                     self.print_progress(generated, total)
                     return
                 elif self.group:
-                    cat_ids = np.random.choice(list(data_idx.keys()), replace=False, size=images_per_instance)
+                    cat_ids = np.random.choice(list(data_idx.keys()), replace=False, size=self.images_per_instance)
 
-                gen = enumerate(cat_ids) if self.group else range(images_per_instance)
+                gen = enumerate(cat_ids) if self.group else range(self.images_per_instance)
 
                 captions = []
                 for i in gen:
@@ -141,7 +149,7 @@ class Data_Handler:
                     cap_batches.append(captions)
 
             ret = (img_batches, cap_batches) if return_captions else img_batches
-            generated += images_per_batch
+            generated += self.images_per_batch
             self.print_progress(generated, total)
             yield ret
 

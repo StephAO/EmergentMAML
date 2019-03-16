@@ -11,12 +11,13 @@ def cosine_similarity(a, b, axis=1):
 
 
 class ReceiverAgent(Agent):
+    layers = []
 
-    def __init__(self, vocab_size, num_distractors, max_len, message, msg_len, loss_type='pairwise', **kwargs):
+    def __init__(self, message, msg_len, *args, **kwargs):
+        # with tf.variable_scope("receiver"):
         self.message = message
         self.msg_len = msg_len
-        with tf.variable_scope("receiver"):
-            super().__init__(vocab_size, num_distractors, max_len, loss_type=loss_type, **kwargs)
+        super().__init__(*args, **kwargs)
 
     def _build_input(self):
         """
@@ -49,8 +50,11 @@ class ReceiverAgent(Agent):
         #                                     kernel_initializer=tf.glorot_uniform_initializer)(self.final_state)
         # self.rnn_features = tf.keras.layers.Dense(self.num_hidden, activation=tf.nn.leaky_relu,
         #                                     kernel_initializer=tf.glorot_uniform_initializer)(self.rnn_features)
-        self.rnn_features = tf.keras.layers.Dense(Agent.num_hidden, activation=tf.nn.tanh,
-                                                  kernel_initializer=tf.glorot_uniform_initializer)(self.final_state)  # (self.rnn_features)
+        fc = tf.keras.layers.Dense(Agent.num_hidden, activation=tf.nn.tanh,
+                                   kernel_initializer=tf.glorot_uniform_initializer)
+        ReceiverAgent.layers.append(fc)
+
+        self.rnn_features = fc(self.final_state)
 
         # TODO: consider adding noise to rnn features - is this different than just changing temperature?
         # self.rnn_features = tf.keras.layers.GaussianNoise(stddev=0.0001)(self.rnn_features)
@@ -59,7 +63,6 @@ class ReceiverAgent(Agent):
         # TODO - can we do this with only matrices?
         self.candidates = []
         self.image_features = []
-        self.img_feat_1 = []  # delete
         self.energies = []
 
         for d in range(Agent.D + 1):
@@ -69,7 +72,6 @@ class ReceiverAgent(Agent):
                 img_feat = Agent.pre_trained(can)
                 if self.freeze_cnn:
                     img_feat = tf.stop_gradient(img_feat)
-
                 img_feat = img_feat / tf.maximum(tf.reduce_max(img_feat, axis=1, keepdims=True), Agent.epsilon)
 
             else:  # use one-hot encoding
@@ -133,11 +135,17 @@ class ReceiverAgent(Agent):
     def _build_optimizer(self):
         self.train_op = tf.contrib.layers.optimize_loss(
             loss=self.loss,
-            global_step=self.step,
+            global_step=Agent.step,
             learning_rate=Agent.lr,
             optimizer="Adam",
             # some gradient clipping stabilizes training in the beginning.
-            clip_gradients=Agent.gradient_clip)
+            clip_gradients=Agent.gradient_clip,
+            # only update receiver agent weights
+            variables=Agent.get_weights() + ReceiverAgent.get_weights()
+        )
+
+    def get_output(self):
+        return self.accuracy, self.loss
 
     def fill_feed_dict(self, fd, candidates, target_idx):
         fd[self.target_indices] = target_idx
@@ -146,7 +154,7 @@ class ReceiverAgent(Agent):
                 fd[self.candidates[i]] = c
 
     def close(self):
-        self.sess.close()
+        Agent.sess.close()
 
     def __del__(self):
-        self.sess.close()
+        Agent.sess.close()

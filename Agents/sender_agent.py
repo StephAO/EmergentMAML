@@ -7,10 +7,13 @@ from utils.data_handler import img_h, img_w
 
 class SenderAgent(Agent):
 
+    layers = []
+
     def __init__(self, *args, **kwargs):
         # TODO define temperature better - maybe learnt temperature?
-        with tf.variable_scope("sender"):
-            super().__init__(*args, **kwargs)
+        # with tf.variable_scope("sender"):
+        self.loss = None
+        super().__init__(*args, **kwargs)
 
 
     def _build_input(self):
@@ -33,7 +36,7 @@ class SenderAgent(Agent):
             self.target_image = tf.placeholder(tf.int32, shape=(Agent.batch_size))
             self.pre_feat = tf.one_hot(self.target_image, Agent.D+1)
 
-        self.s0 = Agent.img_fc(self.pre_feat)
+        self.s0 = self.img_fc(self.pre_feat)
 
         self.starting_tokens = tf.stack([self.sos_token] * Agent.batch_size)
         # Determines input to decoder at next time step
@@ -56,11 +59,11 @@ class SenderAgent(Agent):
         :return:
         """
         # Used to map RNN output to RNN input
-        output_to_input = tf.layers.Dense(Agent.K, #activation=lambda x: tf.nn.softmax,
-                                          kernel_initializer=tf.glorot_uniform_initializer)
+        output_to_input = tf.layers.Dense(Agent.K, kernel_initializer=tf.glorot_uniform_initializer)
+        SenderAgent.layers.append(output_to_input)
 
         # Decoder
-        self.decoder = tf.contrib.seq2seq.BasicDecoder(Agent.gru_cell, self.helper, initial_state=self.s0,
+        self.decoder = tf.contrib.seq2seq.BasicDecoder(self.gru_cell, self.helper, initial_state=self.s0,
                                                        output_layer=output_to_input)
 
         self.rnn_outputs, self.final_state, self.final_sequence_lengths = \
@@ -75,13 +78,36 @@ class SenderAgent(Agent):
 
         # Gumbel Softmax TODO: use gumbel softmax straight through used in https://arxiv.org/abs/1705.11192
         self.dist = tfp.distributions.RelaxedOneHotCategorical(Agent.temperature, logits=self.rnn_outputs)
-        self.output = self.dist.sample()
-        self.prediction = tf.argmax(self.output, axis=2, output_type=tf.int32)
+        self.message = self.dist.sample()
+        self.prediction = tf.argmax(self.message, axis=2, output_type=tf.int32)
+
+    def set_loss(self, loss):
+        self.loss = loss
+        self._build_optimizer()
+
+    def _build_optimizer(self):
+        if self.loss is None:
+            return None
+
+        # TODO test whether having double agent weights (here and in receiver) has an affect)
+        self.train_op = tf.contrib.layers.optimize_loss(
+            loss=self.loss,
+            global_step=Agent.step,
+            learning_rate=Agent.lr,
+            optimizer="Adam",
+            # some gradient clipping stabilizes training in the beginning.
+            clip_gradients=Agent.gradient_clip,
+            # only update sender agent weights
+            variables=Agent.get_weights() + SenderAgent.get_weights()
+        )
+
+        # Initialize
+        Agent.sess.run(tf.global_variables_initializer())
 
     def get_output(self):
-        return self.output, self.prediction, self.final_sequence_lengths
+        return self.message, self.final_sequence_lengths
 
-    def fill_feed_dict(self, feed_dict, target_image):
+    def fill_feed_dict(self, feed_dict, target_image, *args):
         feed_dict[self.target_image] = target_image
 
 
