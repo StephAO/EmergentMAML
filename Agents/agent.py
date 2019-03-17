@@ -1,9 +1,10 @@
 import tensorflow as tf
-
+import os
+import sys
 from utils.data_handler import img_w, img_h
 
 
-class Agent:
+class Agent(object):
     """
     Abstract base class for all agents - eventually the weights contained here will be the weights trained using MAML
     WARNING: must set parameters before creating any agents
@@ -22,8 +23,8 @@ class Agent:
     # TRAINING PARAMETERS
     step = tf.train.get_or_create_global_step()
     lr = 0.001  # self._cyclicLR() #0.005
-    gradient_clip = 10.0
-    temperature = 2.
+    gradient_clip = 5.0
+    temperature = 5.
     loss_type = None
 
     # OTHER
@@ -49,6 +50,12 @@ class Agent:
 
     # list to store MAML layers
     layers = [img_fc, gru_cell]
+
+    # Create save/load directory
+    base_dir = os.path.dirname(sys.modules['__main__'].__file__)
+    data_dir = base_dir + '/data/'
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir)
 
     @staticmethod
     def set_params(K=None, D=None, L=None, lr=None, loss_type=None, batch_size=None, num_hidden=None, temperature=None):
@@ -93,7 +100,26 @@ class Agent:
             weights.extend(l.weights)
         return weights
 
-    def __init__(self, use_images=True):
+    @classmethod
+    def save_model(cls, exp_name):
+        save_dir = Agent.data_dir + "/" + exp_name
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+        checkpoint_path = '/'.join([save_dir, cls.__name__, "checkpoint.ckpt"])
+        cls.saver.save(Agent.sess, checkpoint_path)
+
+    @classmethod
+    def load_model(cls, exp_name):
+        try:
+            checkpoint_path = '/'.join([Agent.data_dir, exp_name, cls.__name__, "checkpoint.ckpt"])
+            cls.saver.restore(Agent.sess, checkpoint_path)
+        except tf.errors.NotFoundError:
+            raise FileNotFoundError("No saved models found for experiment {}".format(exp_name))
+
+    # Create saver
+    saver = None
+
+    def __init__(self, load_key=None, use_images=True):
         """
         Base agent, also currently holds a lot of hyper parameters
         :param vocab_size:
@@ -123,8 +149,10 @@ class Agent:
         self._build_losses()
         self._build_optimizer()
 
-        # Initialize
-        Agent.sess.run(tf.global_variables_initializer())
+        # Create saver
+        Agent.saver = Agent.saver or tf.train.Saver(var_list=Agent.get_weights())
+        if load_key is not None:
+            Agent.load_model(load_key)
 
     def _cyclicLR(self):
         """
@@ -171,6 +199,4 @@ class Agent:
     def _build_optimizer(self):
         pass
 
-    def get_train_op(self):
-        return self.train_op
 

@@ -1,6 +1,7 @@
 import tensorflow as tf
 
-from Agents.agent import Agent
+from .agent import Agent
+from .sender_agent import SenderAgent
 from utils.data_handler import img_w, img_h
 
 
@@ -12,12 +13,17 @@ def cosine_similarity(a, b, axis=1):
 
 class ReceiverAgent(Agent):
     layers = []
+    saver = None
 
-    def __init__(self, message, msg_len, *args, **kwargs):
+    def __init__(self, message, msg_len, load_key=None, *args, **kwargs):
         # with tf.variable_scope("receiver"):
         self.message = message
         self.msg_len = msg_len
         super().__init__(*args, **kwargs)
+        # Create saver
+        ReceiverAgent.saver = ReceiverAgent.saver or tf.train.Saver(var_list=ReceiverAgent.get_weights())
+        if load_key is not None:
+            ReceiverAgent.load_model(load_key)
 
     def _build_input(self):
         """
@@ -125,6 +131,7 @@ class ReceiverAgent(Agent):
         self.ti = tf.stack([tf.range(Agent.batch_size), self.target_indices], axis=1)
         self.target_energy = tf.gather_nd(self.energy_tensor, self.ti)
 
+        # TODO try loss for each timestep to help with long timesequences
         # Hinge loss function using
         # Using relu to clip values below 0 since tf doesn't have a function to clip only 1 side
         loss = tf.nn.relu(1 - tf.expand_dims(self.target_energy, axis=1) + self.energy_tensor)
@@ -133,16 +140,21 @@ class ReceiverAgent(Agent):
         self.accuracy = tf.reduce_mean(tf.cast(tf.equal(self.prediction, self.target_indices), tf.float32))
 
     def _build_optimizer(self):
-        self.train_op = tf.contrib.layers.optimize_loss(
-            loss=self.loss,
-            global_step=Agent.step,
-            learning_rate=Agent.lr,
-            optimizer="Adam",
-            # some gradient clipping stabilizes training in the beginning.
-            clip_gradients=Agent.gradient_clip,
-            # only update receiver agent weights
-            variables=Agent.get_weights() + ReceiverAgent.get_weights()
-        )
+        self.base_train_op, self.sender_train_op, self.receiver_train_op = [
+            tf.contrib.layers.optimize_loss(
+                loss=self.loss,
+                global_step=Agent.step,
+                learning_rate=Agent.lr,
+                optimizer="Adam",
+                # some gradient clipping stabilizes training in the beginning.
+                clip_gradients=Agent.gradient_clip,
+                # only update receiver agent weights
+                variables=v)
+            for v in [Agent.get_weights(), SenderAgent.get_weights(), ReceiverAgent.get_weights()]
+        ]
+
+    def get_train_ops(self):
+        return [self.base_train_op, self.sender_train_op, self.receiver_train_op]
 
     def get_output(self):
         return self.accuracy, self.loss

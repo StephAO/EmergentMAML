@@ -1,19 +1,25 @@
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from Agents.agent import Agent
+from .agent import Agent
 from utils.data_handler import img_h, img_w
 
 
 class SenderAgent(Agent):
 
     layers = []
+    saver = None
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, straight_through=False, load_key=None, **kwargs):
         # TODO define temperature better - maybe learnt temperature?
         # with tf.variable_scope("sender"):
         self.loss = None
-        super().__init__(*args, **kwargs)
+        self.straight_through=straight_through
+        super().__init__(load_key=load_key, **kwargs)
+        # Create saver
+        SenderAgent.saver = SenderAgent.saver or tf.train.Saver(var_list=SenderAgent.get_weights())
+        if load_key is not None:
+            SenderAgent.load_model(load_key)
 
 
     def _build_input(self):
@@ -79,30 +85,12 @@ class SenderAgent(Agent):
         # Gumbel Softmax TODO: use gumbel softmax straight through used in https://arxiv.org/abs/1705.11192
         self.dist = tfp.distributions.RelaxedOneHotCategorical(Agent.temperature, logits=self.rnn_outputs)
         self.message = self.dist.sample()
+
+        if self.straight_through:
+            self.message_hard = tf.cast(tf.one_hot(tf.argmax(y, -1), self.K), self.message.dtype)
+            self.message = tf.stop_gradient(self.message_hard - self.message) + self.message
+
         self.prediction = tf.argmax(self.message, axis=2, output_type=tf.int32)
-
-    def set_loss(self, loss):
-        self.loss = loss
-        self._build_optimizer()
-
-    def _build_optimizer(self):
-        if self.loss is None:
-            return None
-
-        # TODO test whether having double agent weights (here and in receiver) has an affect)
-        self.train_op = tf.contrib.layers.optimize_loss(
-            loss=self.loss,
-            global_step=Agent.step,
-            learning_rate=Agent.lr,
-            optimizer="Adam",
-            # some gradient clipping stabilizes training in the beginning.
-            clip_gradients=Agent.gradient_clip,
-            # only update sender agent weights
-            variables=Agent.get_weights() + SenderAgent.get_weights()
-        )
-
-        # Initialize
-        Agent.sess.run(tf.global_variables_initializer())
 
     def get_output(self):
         return self.message, self.final_sequence_lengths

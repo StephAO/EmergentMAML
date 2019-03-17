@@ -2,7 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pycocotools.coco import COCO
 from skimage import io, transform
-import time
 
 # TODO: consider moving this to a better spot
 img_h = 96
@@ -14,7 +13,7 @@ class Data_Handler:
         self.images_per_instance = images_per_instance
         self.batch_size = batch_size
         self.images_per_batch = self.images_per_instance * self.batch_size
-        self.data_dir = '/home/stephane/cocoapi'
+        self.data_dir = '/h/stephaneao/cocoapi'
         self.dataType = 'train2014'
         self.data_file = '{}/annotations/instances_{}.json'.format(self.data_dir, self.dataType)
         self.caption_file = '{}/annotations/captions_{}.json'.format(self.data_dir, self.dataType)
@@ -31,7 +30,6 @@ class Data_Handler:
         self.split_train_val()
 
     def split_train_val(self):
-        st = time.time()
         all_img_ids = self.coco.getImgIds()
         np.random.shuffle(all_img_ids)
 
@@ -100,7 +98,7 @@ class Data_Handler:
         else:
             data_idx = 0
             np.random.shuffle(data)
-
+            total += len(data)
 
         while self.group or data_idx + self.images_per_batch < len(data):
             img_batches = np.zeros((self.images_per_instance, self.batch_size, img_h, img_w, 3), dtype=np.float32)

@@ -1,6 +1,6 @@
 # TODO use init.py to clean up imports
+from Tasks import ReferentialGame, ImageCaptioning, Reptile
 from Agents import Agent, SenderAgent, ReceiverAgent, ImageCaptioner
-from Tasks import ReferentialGame, ImageCaptioning
 from utils.data_handler import Data_Handler
 import argparse as ap
 import matplotlib.pyplot as plt
@@ -26,49 +26,68 @@ def converged(losses, precision=0.0001, prev_n=3):
 
     return True
 
-def main(epochs=10, task="rg", D=15, K=500, L=1, use_images=True, loss_type='pairwise'):
+def save_models(exp_key, sender=True, receiver=True):
+    Agent.save_model(exp_key)
+    if sender:
+        SenderAgent.save_model(exp_key)
+    if receiver:
+        ReceiverAgent.save_model(exp_key)
+
+def main(epochs=50, task="reptile", D=15, K=10000, L=10, use_images=True, loss_type='pairwise'):
     """
     Run epochs of games
     :return:
     """
+    load_key=None
+
     Agent.set_params(K=K, D=D, L=L, loss_type=loss_type)
     dh = Data_Handler(batch_size=Agent.batch_size, group=False)
 
     if task.lower() in ["rg", "referential game", "referential_game", "referentialgame"]:
-        s = SenderAgent()
-        r = ReceiverAgent(*s.get_output())
-        s.set_loss(r.get_output()[1])
+        s = SenderAgent(load_key=load_key)
+        r = ReceiverAgent(*s.get_output(), load_key=load_key)
         t = ReferentialGame(s, r, dh)
         dh.set_params(images_per_instance=D + 1)
     elif task.lower() in ["ic", "image captioning", "image_captioning", "imagecaptioning"]:
-        ic = ImageCaptioner()
+        ic = ImageCaptioner(load_key=load_key)
         t = ImageCaptioning(ic, dh)
+    elif task.lower() in ["r", "reptile"]:
+        t = Reptile(dh)
     else:
         raise ValueError("Unknown task {}, select from ['referential_game', 'image_captioning']".format(task))
 
+    # Initialize TF
+    variables_to_initialize = tf.global_variables()
+    if load_key is not None:
+        dont_initialize = Agent.get_weights() + SenderAgent.get_weights() + ReceiverAgent.get_weights()
+        variables_to_initialize = [v for v in tf.global_variables() if v not in dont_initialize]
+    Agent.sess.run(tf.variables_initializer(variables_to_initialize))
 
+    exp_key = t.get_experiment_key()
     losses = []
 
     # Starting point
-    print("Validating epoch 0:")
-    accuracy, loss = t.train_epoch(0, mode="val")
-    print("\rloss: {0:1.4f}, accuracy: {1:5.2f}%".format(loss, accuracy * 100), end="\n")
-
-    summ_writer = tf.summary.FileWriter('/home/stephane/PycharmProjects/EmergentMAML/summaries/', Agent.sess.graph)
+    # print("Validating epoch 0:")
+    # accuracy, loss = t.train_epoch(0, mode="val")
+    # print("\rloss: {0:1.4f}, accuracy: {1:5.2f}%".format(loss, accuracy * 100), end="\n")
 
     # Start training
     for e in range(1, epochs + 1):
         print("Training epoch {0}".format(e))
         accuracy, loss = t.train_epoch(e, mode="train")
         print("\rloss: {0:1.4f}, accuracy: {1:5.2f}%".format(loss, accuracy * 100), end="\n")
-        print("Validating epoch {0}".format(e))
-        accuracy, loss = t.train_epoch(e, mode="val")
-        print("\rloss: {0:1.4f}, accuracy: {1:5.2f}%".format(loss, accuracy * 100), end="\n")
-        losses.append(loss)
+        # print("Validating epoch {0}".format(e))
+        # accuracy, loss = t.train_epoch(e, mode="val")
+        # print("\rloss: {0:1.4f}, accuracy: {1:5.2f}%".format(loss, accuracy * 100), end="\n")
+        # losses.append(loss)
 
         # End training if 100% communication rate or convergence reached on loss
         if accuracy == 1.0 or converged(losses):
             break
+
+    save_models(exp_key)
+
+    Agent.sess.close()
 
 
 def bool_type(val):

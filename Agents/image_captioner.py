@@ -12,7 +12,6 @@ class ImageCaptioner(SenderAgent):
         self.image_captions = tf.placeholder(tf.int32, shape=(self.batch_size, self.L))
         super()._build_input()
         self.helper = tf.contrib.seq2seq.TrainingHelper(tf.one_hot(self.image_captions, self.K), [self.L] * self.batch_size)
-
     
     def _build_losses(self):
         """ 
@@ -43,7 +42,10 @@ class ImageCaptioner(SenderAgent):
         )
 
     def get_output(self):
-        return self.message, self.prediction, self.final_sequence_lengths
+        return self.accuracy, self.loss, self.prediction
+
+    def get_train_ops(self):
+        return [self.train_op]
 
     def fill_feed_dict(self, feed_dict, target_image, image_captions):
         feed_dict[self.target_image] = target_image
