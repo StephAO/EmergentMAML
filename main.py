@@ -2,7 +2,7 @@ import sys
 import argparse as ap
 import matplotlib.pyplot as plt
 import numpy as np
-from Tasks import referential_game, image_captioning
+from Tasks import referential_game, image_captioning, image_selection
 
 def converged(losses, precision=0.0001, prev_n=3):
     """
@@ -27,7 +27,8 @@ def main(epochs=10, D=7, K=500, L=15, use_images=True, loss_type='pairwise'):
     :return:
     """
     # rg = referential_game.ReferentialGame(K=K, D=D, L=L, use_images=use_images, loss_type=loss_type)
-    rg = image_captioning.ImageCaptioning(K=K, L=L)
+    # rg = image_captioning.ImageCaptioning(K=K, L=L)
+    rg = image_selection.ImageSelection(K=K, D=D, L=L)
 
     losses = []
 

@@ -5,21 +5,23 @@ import numpy as np
 from comet_ml import Experiment
 
 from Agents.agent import Agent
-from Agents.image_captioner import ImageCaptioner
+from Agents.image_selector import ImageSelector
+
 from utils import data_handler as dh
 from utils.vocabulary import Vocabulary as V
 
-
-class ImageCaptioning:
+class ImageSelection:
     """
-    Class for running the image captioner
+    class for running the image selector
     """
-    def __init__(self, K, L, track_results=True):
-        """ 
-        Initialize this Image Captioning task
+    
+    def __init__(self, K, D, L, loss_type='pairwise', track_results=True):
+        """
+        Initialize the image selection task
         """
         self.L = L
         self.K = K
+        self.D = D 
 
         self.dh = dh.Data_Handler()
         
@@ -29,10 +31,10 @@ class ImageCaptioning:
         except FileNotFoundError:
             self.V.generate_vocab()
             self.V.save_vocab()
-        
+            
         self.V.generate_top_k(K)
         
-        self.image_captioner = ImageCaptioner(K, 0, L, use_images=True)
+        self.image_selector = ImageSelector(K, D, L, use_images=True)
         self.batch_size = Agent.batch_size
         
         self.train_metrics = {}
@@ -43,22 +45,21 @@ class ImageCaptioning:
                                      disabled=(not track_results))
 
         self.experiment.log_multiple_params(Agent.get_params())
-
+        
     def train_epoch(self, e, data_type="train"):
         """
-        Play an epoch of a game defined by iterating over of each image of the dataset once (within a margin)
-        For not using images, this is identical of play_game
         :return:
         """
         losses = []
         accuracies = []
 
-        image_gen = self.dh.get_images(images_per_instance=1, batch_size=self.batch_size, return_captions=True,
-                                       data_type=data_type)
+        image_gen = self.dh.get_images(images_per_instance=self.D + 1, 
+            batch_size=self.batch_size, return_captions=True,
+            data_type=data_type)
         while True:
             try:
                 images, captions = next(image_gen)
-                acc, loss = self.train_batch(images[0], captions, data_type=data_type)
+                acc, loss = self.train_batch(images, captions, data_type=data_type)
                 losses.append(loss)
                 accuracies.append(acc)
             except StopIteration:
@@ -72,43 +73,34 @@ class ImageCaptioning:
             self.experiment.log_multiple_metrics(self.val_metrics)
 
         return avg_acc, avg_loss
-
+        
     def train_batch(self, images, captions, data_type="train"):
-        """
-        Run the Image captioning to learn parameters
-        """
+        
+        target_indices = np.random.randint(self.D + 1, size=self.batch_size)
+        target_captions = np.zeros((self.L, self.batch_size, self.K))
+        
+        candidates = images
+        
+        for i, ti in enumerate(target_indices):
+            chosen_caption = captions[i][target_indices[i]][np.random.randint(5)]
+            tokens = chosen_caption.translate(str.maketrans('', '', string.punctuation))
+            tokens = tokens.lower().split()
+            target_caption_ids = self.V.tokens_to_ids(self.L, tokens)
+            target_captions_one_hot = np.zeros((self.L, self.K))
+            target_captions_one_hot[np.arange(self.L),target_caption_ids] = 1
+            target_captions[:,i] = target_captions_one_hot
+        
         fd = {}
-
-        captions = self.get_useable_captions(captions)
-
-        self.image_captioner.fill_feed_dict(fd, images, captions)
-        accuracy, loss, prediction, step = self.image_captioner.run_game(fd, data_type=data_type)
+        self.image_selector.fill_feed_dict(fd, target_captions, candidates, target_indices)
+        
+        accuracy, loss, prediction, step = self.image_selector.run_game(fd, data_type=data_type)
 
         if data_type == "train":
             self.experiment.set_step(step)
             self.train_metrics["Training Accuracy"] = accuracy
             self.train_metrics["Training Loss"] = loss
             self.experiment.log_multiple_metrics(self.train_metrics)
-        elif data_type == "val" and False:
-            print(self.V.ids_to_tokens(prediction.T[0]))
-            img = images[0]
-            plt.axis('off')
-            plt.imshow(img)
-            plt.show()
 
         return accuracy, loss
         
-    def get_useable_captions(self, in_captions):
-
-        captions = np.zeros((self.image_captioner.batch_size, self.L))
-
-        for i, caption in enumerate(in_captions):
-            # Randomly select caption to use
-            chosen_caption = caption[0][np.random.randint(5)]
-            tokens = chosen_caption.translate(str.maketrans('', '', string.punctuation))
-            tokens = tokens.lower().split()
-            captions[i] = self.V.tokens_to_ids(self.L, tokens)
-
-        return captions
-
-    
+        
