@@ -10,7 +10,7 @@ class SenderAgent(Agent):
     layers = []
     saver = None
 
-    def __init__(self, straight_through=False, load_key=None, **kwargs):
+    def __init__(self, straight_through=True, load_key=None, **kwargs):
         # TODO define temperature better - maybe learnt temperature?
         # with tf.variable_scope("sender"):
         self.loss = None
@@ -42,7 +42,8 @@ class SenderAgent(Agent):
             self.target_image = tf.placeholder(tf.int32, shape=(Agent.batch_size))
             self.pre_feat = tf.one_hot(self.target_image, Agent.D+1)
 
-        self.s0 = self.img_fc(self.pre_feat)
+        self.s0 = tf.nn.rnn_cell.LSTMStateTuple(self.img_fc(self.pre_feat),
+                                                tf.zeros((Agent.batch_size, Agent.num_hidden), dtype=tf.float32))
 
         self.starting_tokens = tf.stack([self.sos_token] * Agent.batch_size)
         # Determines input to decoder at next time step
@@ -69,15 +70,14 @@ class SenderAgent(Agent):
         SenderAgent.layers.append(output_to_input)
 
         # Decoder
-        self.decoder = tf.contrib.seq2seq.BasicDecoder(self.gru_cell, self.helper, initial_state=self.s0,
+        self.decoder = tf.contrib.seq2seq.BasicDecoder(self.rnn_cell, self.helper, initial_state=self.s0,
                                                        output_layer=output_to_input)
 
-        self.rnn_outputs, self.final_state, self.final_sequence_lengths = \
+        self.outputs, self.final_state, self.final_sequence_lengths = \
             tf.contrib.seq2seq.dynamic_decode(self.decoder, output_time_major=True, maximum_iterations=Agent.L)
-
         # Select rnn_outputs from rnn_outputs: see
         # https://www.tensorflow.org/api_docs/python/tf/contrib/seq2seq/BasicDecoderOutput
-        self.rnn_outputs = self.rnn_outputs[0]
+        self.rnn_outputs = self.outputs.rnn_output
 
         # TODO: consider annealing temperature
         # self.temperature = tf.clip_by_value(10000. / tf.cast(self.epoch, tf.float32), 0.5, 10.)
@@ -87,7 +87,7 @@ class SenderAgent(Agent):
         self.message = self.dist.sample()
 
         if self.straight_through:
-            self.message_hard = tf.cast(tf.one_hot(tf.argmax(y, -1), self.K), self.message.dtype)
+            self.message_hard = tf.cast(tf.one_hot(tf.argmax(self.message, -1), self.K), self.message.dtype)
             self.message = tf.stop_gradient(self.message_hard - self.message) + self.message
 
         self.prediction = tf.argmax(self.message, axis=2, output_type=tf.int32)

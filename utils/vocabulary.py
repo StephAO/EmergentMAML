@@ -108,12 +108,19 @@ class Vocabulary:
         """
         # Pad with eos if too short
         ids = np.full((L), self.eos_id)
+        idx = 0
 
-        for j, tok in enumerate(tokens):
+        for tok in tokens:
             # Truncate captions if too long (leave at least one eos tokens)
-            if j >= L - 1:
+            if idx >= L:
                 break
-            ids[j] = self.get_id(tok)
+            # TODO not sure if this a good or bad thing
+            # Avoid uninformative tokens
+            if tok in ["", "a", "an", "the"]:
+                continue
+            ids[idx] = self.get_id(tok)
+            idx += 1
+
         return ids
     
     def ids_to_tokens(self, ids):

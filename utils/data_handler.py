@@ -13,7 +13,7 @@ class Data_Handler:
         self.images_per_instance = images_per_instance
         self.batch_size = batch_size
         self.images_per_batch = self.images_per_instance * self.batch_size
-        self.data_dir = '/h/stephaneao/cocoapi'
+        self.data_dir = '/home/stephane/cocoapi'
         self.dataType = 'train2014'
         self.data_file = '{}/annotations/instances_{}.json'.format(self.data_dir, self.dataType)
         self.caption_file = '{}/annotations/captions_{}.json'.format(self.data_dir, self.dataType)

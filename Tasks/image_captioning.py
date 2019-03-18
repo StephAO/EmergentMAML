@@ -38,7 +38,8 @@ class ImageCaptioning:
             self.V.save_vocab()
         
         self.V.generate_top_k(self.K)
-        
+
+        self.track_results = track_results
         self.train_metrics = {}
         self.val_metrics = {}
         self.experiment = experiment or Experiment(api_key='1jl4lQOnJsVdZR6oekS6WO5FI',
@@ -85,10 +86,11 @@ class ImageCaptioning:
         """
         fd = {}
 
-        captions = self.get_useable_captions(captions)
+        in_captions, out_captions = self.get_useable_captions(captions)
+
         images = np.squeeze(images)
 
-        self.image_captioner.fill_feed_dict(fd, images, captions)
+        self.image_captioner.fill_feed_dict(fd, images, in_captions, out_captions)
         accuracy, loss, prediction = self.run_game(fd, mode=mode)
 
         if mode == "val" and False:
@@ -100,18 +102,23 @@ class ImageCaptioning:
 
         return accuracy, loss
         
-    def get_useable_captions(self, in_captions):
+    def get_useable_captions(self, captions):
 
-        captions = np.zeros((self.image_captioner.batch_size, self.L))
+        in_captions = np.zeros((self.image_captioner.batch_size, self.L))
+        out_captions = np.zeros((self.image_captioner.batch_size, self.L))
 
-        for i, caption in enumerate(in_captions):
+        for i, caption in enumerate(captions):
             # Randomly select caption to use
             chosen_caption = caption[np.random.randint(5)]
             tokens = chosen_caption.translate(str.maketrans('', '', string.punctuation))
             tokens = tokens.lower().split()
-            captions[i] = self.V.tokens_to_ids(self.L, tokens)
+            out = self.V.tokens_to_ids(self.L, tokens)
+            in_ = np.roll(out, 1)
+            in_[0] = self.V.sos_id
+            out_captions[i] = out
+            in_captions[i] = in_
 
-        return captions
+        return in_captions, out_captions
 
     def run_game(self, fd, mode="train"):
         ops = self.run_ops

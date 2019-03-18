@@ -44,15 +44,14 @@ class Agent(object):
                                    kernel_initializer=tf.glorot_uniform_initializer)
     # img_fc = tf.make_template("img_fc", img_fc)
     # img_fc.name = "shared_fc"
-    # Shared GRU cell
-    gru_cell = tf.nn.rnn_cell.GRUCell(num_hidden, kernel_initializer=tf.random_normal_initializer,
-                                      name="shared_gru")#, reuse=tf.AUTO_REUSE)
+    # Shared RNN cell
+    rnn_cell = tf.nn.rnn_cell.LSTMCell(num_hidden, initializer=tf.glorot_uniform_initializer)#, state_is_tuple=False)
 
     # list to store MAML layers
-    layers = [img_fc, gru_cell]
+    layers = [img_fc, rnn_cell]
 
     # Create save/load directory
-    base_dir = "/h/stephaneao/EmergentMAML"#os.path.dirname(sys.modules['__main__'].__file__)
+    base_dir = os.path.dirname(sys.modules['__main__'].__file__)
     data_dir = base_dir + '/data/'
     if not os.path.exists(data_dir):
         os.makedirs(data_dir)

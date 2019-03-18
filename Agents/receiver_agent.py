@@ -34,7 +34,7 @@ class ReceiverAgent(Agent):
         :return: None
         """
         # TODO: consider a better starting state for receiver
-        self.s0 = tf.zeros((Agent.batch_size, Agent.num_hidden), dtype=tf.float32)
+        self.s0 = Agent.rnn_cell.zero_state(Agent.batch_size, dtype=tf.float32)
 
     def _build_output(self):
         """
@@ -48,7 +48,7 @@ class ReceiverAgent(Agent):
         Get predicted image by finding image with the highest energy
         :return:
         """
-        self.rnn_outputs, self.final_state = tf.nn.dynamic_rnn(Agent.gru_cell, self.message, initial_state=self.s0, time_major=True)
+        self.rnn_outputs, self.final_state = tf.nn.dynamic_rnn(Agent.rnn_cell, self.message, initial_state=self.s0, time_major=True)
                                                                # sequence_length=self.msg_len, time_major=True)
         # Get RNN features
         # TODO consider using final rnn_output instead of final_state (not sure which is better)
@@ -60,7 +60,7 @@ class ReceiverAgent(Agent):
                                    kernel_initializer=tf.glorot_uniform_initializer)
         ReceiverAgent.layers.append(fc)
 
-        self.rnn_features = fc(self.final_state)
+        self.rnn_features = fc(self.final_state.c)
 
         # TODO: consider adding noise to rnn features - is this different than just changing temperature?
         # self.rnn_features = tf.keras.layers.GaussianNoise(stddev=0.0001)(self.rnn_features)
