@@ -22,7 +22,7 @@ class Agent(object):
 
     # TRAINING PARAMETERS
     step = tf.train.get_or_create_global_step()
-    lr = 0.0005  # self._cyclicLR() #0.005
+    lr = 0.001  # self._cyclicLR() #0.005
     gradient_clip = 5.0
     temperature = 5.
     loss_type = None
@@ -45,13 +45,13 @@ class Agent(object):
     # img_fc = tf.make_template("img_fc", img_fc)
     # img_fc.name = "shared_fc"
     # Shared RNN cell
-    rnn_cell = tf.nn.rnn_cell.LSTMCell(num_hidden, initializer=tf.glorot_uniform_initializer)#, state_is_tuple=False)
+    rnn_cell = tf.nn.rnn_cell.LSTMCell(num_hidden, initializer=tf.glorot_uniform_initializer)
 
     # list to store MAML layers
     layers = [img_fc, rnn_cell]
 
     # Create save/load directory
-    base_dir = os.path.dirname(sys.modules['__main__'].__file__)
+    base_dir = "/h/stephaneao/EmergentMAML/" #os.path.dirname(sys.modules['__main__'].__file__)
     data_dir = base_dir + '/data/'
     if not os.path.exists(data_dir):
         os.makedirs(data_dir)
