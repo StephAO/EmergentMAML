@@ -41,7 +41,7 @@ class ReferentialGame:
         self.train_metrics = {}
         self.val_metrics = {}
         self.experiment = experiment or Experiment(api_key='1jl4lQOnJsVdZR6oekS6WO5FI',
-                                                   project_name='Reptile',
+                                                   project_name='Referential Game',
                                                    auto_param_logging=False, auto_metric_logging=False,
                                                    disabled=(not track_results))
 

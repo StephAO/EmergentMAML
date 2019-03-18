@@ -25,7 +25,7 @@ class Vocabulary:
         self.unk_id = 2
 
         # MSCOCO handler
-        self.coco_data_dir = '/home/stephane/cocoapi'
+        self.coco_data_dir = '/h/stephaneao/cocoapi'
         self.coco_dataType = 'train2014'
         self.coco_caption_file = '{}/annotations/captions_{}.json'.format(self.coco_data_dir, self.coco_dataType)
 
@@ -67,9 +67,9 @@ class Vocabulary:
         with open(self.data_dir + 'vocabulary_counter.p', 'rb') as vc:
             self.vocabulary_counter = pickle.load(vc)
 
-    def get_top_k(self, k):
+    def generate_top_k(self, k):
         """
-        Returns a dictionary with start of sentence, end of sentence, unknown tokens + (k-3) most common tokens from the
+        Generates a dictionary with start of sentence, end of sentence, unknown tokens + (k-3) most common tokens from the
         generated dictionary (see generate_vocab)
         :param k:
         :return:
@@ -89,9 +89,43 @@ class Vocabulary:
             self.vocabulary[tok] = id
             self.reverse_vocabulary[id] = tok
             id += 1
+    
+    def get_id(self, token):
+        """
+        Return the id given the corresponding token
+        """
+        return self.vocabulary.get(token, self.unk_id)
+    
+    def get_token(self, id):
+        """
+        Return the token given the corresponding id
+        """
+        return self.reverse_vocabulary.get(id, self.unk)
+        
+    def tokens_to_ids(self, L, tokens):
+        """
+        Map a sequence of tokens to ids
+        """
+        # Pad with eos if too short
+        ids = np.full((L), self.eos_id)
 
-        return self.vocabulary, self.reverse_vocabulary
-
+        for j, tok in enumerate(tokens):
+            # Truncate captions if too long (leave at least one eos tokens)
+            if j >= L - 1:
+                break
+            ids[j] = self.get_id(tok)
+        return ids
+    
+    def ids_to_tokens(self, ids):
+        """
+        Map a sequence of ids to tokens
+        """
+        # Pad with eos if too short
+        tokens = []
+        for id in ids:
+            tokens.append(self.get_token(id))
+        return ' '.join(tokens)
+    
 if __name__ == "__main__":
     v = Vocabulary()
     # v.generate_vocab()

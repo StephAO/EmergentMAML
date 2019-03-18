@@ -1,12 +1,10 @@
 # TODO use init.py to clean up imports
-from Tasks import ReferentialGame, ImageCaptioning, Reptile
-from Agents import Agent, SenderAgent, ReceiverAgent, ImageCaptioner
+from Tasks import ReferentialGame, ImageCaptioning, Reptile, ImageSelection
+from Agents import Agent, SenderAgent, ReceiverAgent, ImageCaptioner, ImageSelector
 from utils.data_handler import Data_Handler
 import argparse as ap
 import matplotlib.pyplot as plt
 import numpy as np
-import sys
-
 import tensorflow as tf
 
 def converged(losses, precision=0.0001, prev_n=3):
@@ -33,7 +31,7 @@ def save_models(exp_key, sender=True, receiver=True):
     if receiver:
         ReceiverAgent.save_model(exp_key)
 
-def main(epochs=50, task="reptile", D=15, K=10000, L=10, use_images=True, loss_type='pairwise'):
+def main(epochs=50, task="is", D=31, K=10000, L=10, use_images=True, loss_type='pairwise'):
     """
     Run epochs of games
     :return:
@@ -51,6 +49,10 @@ def main(epochs=50, task="reptile", D=15, K=10000, L=10, use_images=True, loss_t
     elif task.lower() in ["ic", "image captioning", "image_captioning", "imagecaptioning"]:
         ic = ImageCaptioner(load_key=load_key)
         t = ImageCaptioning(ic, dh)
+    elif task.lower() in ["is", "image selection", "image_selection", "imageselection"]:
+        is_ = ImageSelector(load_key=load_key)
+        t = ImageSelection(is_, dh)
+        dh.set_params(images_per_instance=D + 1)
     elif task.lower() in ["r", "reptile"]:
         t = Reptile(dh)
     else:

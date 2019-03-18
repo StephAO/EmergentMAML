@@ -4,8 +4,8 @@ Based heavily on https://github.com/openai/supervised-reptile/blob/master/superv
 from comet_ml import Experiment
 from Tasks import image_captioning as ic, referential_game as rg
 from utils.variables import *
-from Agents import Agent, SenderAgent, ReceiverAgent, ImageCaptioner
-from Tasks import ReferentialGame, ImageCaptioning
+from Agents import Agent, SenderAgent, ReceiverAgent, ImageCaptioner, ImageSelector
+from Tasks import ReferentialGame, ImageCaptioning, ImageSelection
 from utils.data_handler import Data_Handler
 import tensorflow as tf
 
@@ -27,13 +27,14 @@ class Reptile:
     allowed to leak between test samples via BatchNorm.
     Typically, MAML is used in a transductive manner.
     """
-    def __init__(self, data_handler, sender=True, receiver=True, image_captioner=True, track_results=True):
+    def __init__(self, data_handler, sender=True, receiver=True, image_captioner=True, image_selector=True, track_results=True):
         self.sess = Agent.sess
         self.N = 4 # number of steps taken for each task - should be > 1
 
         self.S = SenderAgent()
         self.R = ReceiverAgent(*self.S.get_output())
         self.IC = ImageCaptioner()
+        self.IS = ImageSelector
 
         self.train_metrics = {}
         self.val_metrics = {}
@@ -46,6 +47,9 @@ class Reptile:
         if image_captioner:
             self.ic = ImageCaptioning(self.IC, experiment=self.experiment, track_results=False)
             self.T["Image Captioner"] = lambda img, capts: self.ic.train_batch(images=img, captions=capts, mode="train")
+        if image_selector:
+            self.is_ = ImageSelection(self.IS, experiment=self.experiment, track_results=False)
+            self.T["Image Selector"] = lambda img, capts: self.ic.train_batch(images=img, captions=capts, mode="train")
         if sender or receiver:
             self.rg = ReferentialGame(self.S, self.R, experiment=self.experiment, track_results=False)
             if receiver:
@@ -94,7 +98,7 @@ class Reptile:
                 # For each task
                 for task in self.T:
                     # parameter setup to not waste data
-                    if task in ["Sender", "Receiver"]:
+                    if task in ["Sender", "Receiver", "Image Selector"]:
                         self.dh.set_params(images_per_instance=Agent.D+1)
                     else:
                         self.dh.set_params(images_per_instance=1)

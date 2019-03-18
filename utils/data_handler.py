@@ -141,6 +141,7 @@ class Data_Handler:
                         ann_id = self.coco_capts.getAnnIds(imgIds=img_id)
                         anns = self.coco_capts.loadAnns(ann_id)
                         for a in anns:
+                            # img_captions.append(a['caption'])
                             captions.append(a['caption'])
 
                 if return_captions:

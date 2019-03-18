@@ -1,3 +1,4 @@
-from Tasks.referential_game import ReferentialGame
-from Tasks.image_captioning import ImageCaptioning
-from Tasks.reptile import Reptile
+from .referential_game import ReferentialGame
+from .image_captioning import ImageCaptioning
+from .image_selection import ImageSelection
+from .reptile import Reptile
