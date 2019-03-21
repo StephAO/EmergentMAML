@@ -48,7 +48,6 @@ class ImageSelection:
                                                    project_name='Image Selection',
                                                    auto_param_logging=False, auto_metric_logging=False,
                                                    disabled=(not track_results))
-
         self.experiment.log_multiple_params(Agent.get_params())
 
 
@@ -89,7 +88,7 @@ class ImageSelection:
         candidates = images
         
         for i, ti in enumerate(target_indices):
-            chosen_caption = captions[ti][np.random.randint(5)]
+            chosen_caption = captions[i][ti][np.random.randint(5)]
             tokens = chosen_caption.translate(str.maketrans('', '', string.punctuation))
             tokens = tokens.lower().split()
             target_caption_ids = self.V.tokens_to_ids(self.L, tokens)

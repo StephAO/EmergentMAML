@@ -13,7 +13,7 @@ class Data_Handler:
         self.images_per_instance = images_per_instance
         self.batch_size = batch_size
         self.images_per_batch = self.images_per_instance * self.batch_size
-        self.data_dir = '/home/stephane/cocoapi'
+        self.data_dir = '/h/stephaneao/cocoapi'
         self.dataType = 'train2014'
         self.data_file = '{}/annotations/instances_{}.json'.format(self.data_dir, self.dataType)
         self.caption_file = '{}/annotations/captions_{}.json'.format(self.data_dir, self.dataType)
@@ -138,11 +138,12 @@ class Data_Handler:
 
                     img_batches[i, b] = img
                     if return_captions:
+                        img_captions = []
                         ann_id = self.coco_capts.getAnnIds(imgIds=img_id)
                         anns = self.coco_capts.loadAnns(ann_id)
                         for a in anns:
-                            # img_captions.append(a['caption'])
-                            captions.append(a['caption'])
+                            img_captions.append(a['caption'])
+                        captions.append(img_captions)
 
                 if return_captions:
                     cap_batches.append(captions)

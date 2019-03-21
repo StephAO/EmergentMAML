@@ -109,7 +109,7 @@ class ImageCaptioning:
 
         for i, caption in enumerate(captions):
             # Randomly select caption to use
-            chosen_caption = caption[np.random.randint(5)]
+            chosen_caption = caption[0][np.random.randint(5)]
             tokens = chosen_caption.translate(str.maketrans('', '', string.punctuation))
             tokens = tokens.lower().split()
             out = self.V.tokens_to_ids(self.L, tokens)

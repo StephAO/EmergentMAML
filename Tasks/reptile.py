@@ -87,6 +87,7 @@ class Reptile:
     def train_epoch(self, e, mode=None):
         image_gen = self.dh.get_images(return_captions=True, mode="train")
         full_set_counter = 1
+        self.experiment.set_step(full_set_counter)
         start_vars = {k: s.export_variables() for k, s in self.states.items()}
 
         while True:
@@ -109,11 +110,11 @@ class Reptile:
 
                     self.train_metrics[task + " Accuracy"] = acc
                     self.train_metrics[task + " Loss"] = loss
-                    self.experiment.log_metrics(self.train_metrics)
                     # Store new variables
                     [new_vars[k].append(s.export_variables()) for k, s in self.states.items()]
                     # Reset to old variables for next task
                     [s.import_variables(old_vars[k]) for k, s in self.states.items()]
+                self.experiment.log_metrics(self.train_metrics)
                 full_set_counter += 1
                 self.experiment.set_step(full_set_counter)
                 # Average new variables

@@ -17,7 +17,7 @@ class Agent(object):
     # MODEL PARAMETERS
     freeze_cnn = True
     num_hidden = 512
-    batch_size = 64
+    batch_size = 128
     batch_shape = (batch_size, img_h, img_w, 3)
 
     # TRAINING PARAMETERS
@@ -51,7 +51,7 @@ class Agent(object):
     layers = [img_fc, rnn_cell]
 
     # Create save/load directory
-    base_dir = os.path.dirname(sys.modules['__main__'].__file__)
+    base_dir = '/h/stephaneao/EmergentMAML' #os.path.dirname(sys.modules['__main__'].__file__)
     data_dir = base_dir + '/data/'
     if not os.path.exists(data_dir):
         os.makedirs(data_dir)
