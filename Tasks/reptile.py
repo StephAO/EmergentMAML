@@ -34,7 +34,7 @@ class Reptile:
         self.S = SenderAgent()
         self.R = ReceiverAgent(*self.S.get_output())
         self.IC = ImageCaptioner()
-        self.IS = ImageSelector
+        self.IS = ImageSelector()
 
         self.train_metrics = {}
         self.val_metrics = {}
@@ -49,7 +49,7 @@ class Reptile:
             self.T["Image Captioner"] = lambda img, capts: self.ic.train_batch(images=img, captions=capts, mode="train")
         if image_selector:
             self.is_ = ImageSelection(self.IS, experiment=self.experiment, track_results=False)
-            self.T["Image Selector"] = lambda img, capts: self.ic.train_batch(images=img, captions=capts, mode="train")
+            self.T["Image Selector"] = lambda img, capts: self.is_.train_batch(images=img, captions=capts, mode="train")
         if sender or receiver:
             self.rg = ReferentialGame(self.S, self.R, experiment=self.experiment, track_results=False)
             if receiver:
@@ -109,7 +109,7 @@ class Reptile:
 
                     self.train_metrics[task + " Accuracy"] = acc
                     self.train_metrics[task + " Loss"] = loss
-                    self.experiment.log_multiple_metrics(self.train_metrics)
+                    self.experiment.log_metrics(self.train_metrics)
                     # Store new variables
                     [new_vars[k].append(s.export_variables()) for k, s in self.states.items()]
                     # Reset to old variables for next task
@@ -128,7 +128,7 @@ class Reptile:
 
         self.experiment.set_step(e)
         self.val_metrics["Weight Change"] = weight_diff
-        self.experiment.log_multiple_metrics(self.val_metrics)
+        self.experiment.log_metrics(self.val_metrics)
 
         return 0, weight_diff
 

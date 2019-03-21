@@ -1,5 +1,9 @@
 import numpy as np
 from comet_ml import Experiment
+import matplotlib.pyplot as plt
+from utils.vocabulary import Vocabulary as V
+
+
 
 from Agents import Agent
 
@@ -31,6 +35,16 @@ class ReferentialGame:
         self.batch_size = Agent.batch_size
         self.K = Agent.K  # Vocabulary Size
         self.D = Agent.D  # Distractor Set Size
+
+        # Set up vocabulary
+        self.V = V()
+        try:
+            self.V.load_vocab()
+        except FileNotFoundError:
+            self.V.generate_vocab()
+            self.V.save_vocab()
+
+        self.V.generate_top_k(self.K)
 
         # Get necessary ops to run
         self.run_ops = list(self.receiver.get_output()) + [Agent.step]
@@ -77,7 +91,7 @@ class ReferentialGame:
             self.experiment.set_step(e)
             self.val_metrics["Validation Accuracy"] = avg_acc
             self.val_metrics["Validation Loss"] = avg_loss
-            self.experiment.log_multiple_metrics(self.val_metrics)
+            self.experiment.log_metrics(self.val_metrics)
 
         self.sender.save_model(self.experiment.get_key())
         self.receiver.save_model(self.experiment.get_key())
@@ -107,28 +121,35 @@ class ReferentialGame:
         self.sender.fill_feed_dict(fd, target)
         self.receiver.fill_feed_dict(fd, candidates, target_indices)
 
-        accuracy, loss = self.run_game(fd, mode=mode)
+        accuracy, loss, prediction = self.run_game(fd, mode=mode)
+
+        if mode == "val":
+            print(self.V.ids_to_tokens(prediction.T[0]))
+            img = images[0][0]
+            plt.axis('off')
+            plt.imshow(img)
+            plt.show()
 
 
         return accuracy, loss
 
     def run_game(self, fd, mode="train"):
-        ops = self.run_ops
+        ops = self.run_ops + [self.sender.prediction]
         if mode == "train":
             ops += self.train_ops
         elif mode == "sender_train":
             ops += [self.train_ops[0]]
         elif mode == "receiver_train":
             ops += [self.train_ops[1]]
-        acc, loss, step = Agent.sess.run(ops, feed_dict=fd)[:3]
+        acc, loss, step, prediction = Agent.sess.run(ops, feed_dict=fd)[:4]
 
         if mode[-5:] == "train" and self.track_results:
             stylized_mode = ' '.join(x.capitalize() for x in mode.split('_'))
             self.experiment.set_step(step)
             self.train_metrics[stylized_mode + "ing Accuracy"] = acc
             self.train_metrics[stylized_mode + "ing Loss"] = loss
-            self.experiment.log_multiple_metrics(self.train_metrics)
+            self.experiment.log_metrics(self.train_metrics)
 
-        return acc, loss
+        return acc, loss, prediction
 
 

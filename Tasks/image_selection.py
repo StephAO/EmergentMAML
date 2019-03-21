@@ -77,7 +77,7 @@ class ImageSelection:
             self.experiment.set_step(e)
             self.val_metrics["Validation Accuracy"] = avg_acc
             self.val_metrics["Validation Loss"] = avg_loss
-            self.experiment.log_multiple_metrics(self.val_metrics)
+            self.experiment.log_metrics(self.val_metrics)
 
         return avg_acc, avg_loss
         
@@ -114,6 +114,6 @@ class ImageSelection:
             self.experiment.set_step(step)
             self.train_metrics["Image Selection Training Accuracy"] = acc
             self.train_metrics["Image Selection Training Loss"] = loss
-            self.experiment.log_multiple_metrics(self.train_metrics)
+            self.experiment.log_metrics(self.train_metrics)
 
         return acc, loss

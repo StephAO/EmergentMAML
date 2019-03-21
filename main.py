@@ -31,12 +31,12 @@ def save_models(exp_key, sender=True, receiver=True):
     if receiver:
         ReceiverAgent.save_model(exp_key)
 
-def main(epochs=50, task="rg", D=31, K=10000, L=10, use_images=True, loss_type='pairwise'):
+def main(epochs=50, task="rg", D=15, K=10000, L=10, use_images=True, loss_type='pairwise'):
     """
     Run epochs of games
     :return:
     """
-    load_key=None
+    load_key="d4faab15e68246709d224f35be42ac96"
 
     Agent.set_params(K=K, D=D, L=L, loss_type=loss_type)
     dh = Data_Handler(batch_size=Agent.batch_size, group=False)
@@ -78,10 +78,10 @@ def main(epochs=50, task="rg", D=31, K=10000, L=10, use_images=True, loss_type='
         print("Training epoch {0}".format(e))
         accuracy, loss = t.train_epoch(e, mode="train")
         print("\rloss: {0:1.4f}, accuracy: {1:5.2f}%".format(loss, accuracy * 100), end="\n")
-        # print("Validating epoch {0}".format(e))
-        # accuracy, loss = t.train_epoch(e, mode="val")
-        # print("\rloss: {0:1.4f}, accuracy: {1:5.2f}%".format(loss, accuracy * 100), end="\n")
-        # losses.append(loss)
+        print("Validating epoch {0}".format(e))
+        accuracy, loss = t.train_epoch(e, mode="val")
+        print("\rloss: {0:1.4f}, accuracy: {1:5.2f}%".format(loss, accuracy * 100), end="\n")
+        losses.append(loss)
 
         # End training if 100% communication rate or convergence reached on loss
         if accuracy == 1.0 or converged(losses):
