@@ -29,12 +29,13 @@ class Reptile:
     """
     def __init__(self, data_handler, sender=True, receiver=True, image_captioner=True, image_selector=True, track_results=True):
         self.sess = Agent.sess
-        self.N = 4 # number of steps taken for each task - should be > 1
+        self.N = 6 # number of steps taken for each task - should be > 1
 
         self.S = SenderAgent()
         self.R = ReceiverAgent(*self.S.get_output())
         self.IC = ImageCaptioner()
         self.IS = ImageSelector()
+        self.step = 1
 
         self.train_metrics = {}
         self.val_metrics = {}
@@ -86,8 +87,7 @@ class Reptile:
 
     def train_epoch(self, e, mode=None):
         image_gen = self.dh.get_images(return_captions=True, mode="train")
-        full_set_counter = 1
-        self.experiment.set_step(full_set_counter)
+        self.experiment.set_step(self.step)
         start_vars = {k: s.export_variables() for k, s in self.states.items()}
 
         while True:
@@ -97,7 +97,7 @@ class Reptile:
                 new_vars = {k: [] for k, s in self.states.items()}
 
                 # For each task
-                for task in self.T:
+                for task in ["Image Captioner", "Image Selector", "Sender", "Receiver"]:
                     # parameter setup to not waste data
                     if task in ["Sender", "Receiver", "Image Selector"]:
                         self.dh.set_params(images_per_instance=Agent.D+1)
@@ -115,19 +115,19 @@ class Reptile:
                     # Reset to old variables for next task
                     [s.import_variables(old_vars[k]) for k, s in self.states.items()]
                 self.experiment.log_metrics(self.train_metrics)
-                full_set_counter += 1
-                self.experiment.set_step(full_set_counter)
+                self.step += 1
+                self.experiment.set_step(self.step)
                 # Average new variables
                 new_vars = {k: average_vars(new_vars[k]) for k, s in self.states.items()}
                 # Set variables to new variables
-                [s.import_variables(interpolate_vars(old_vars[k], new_vars[k], 0.1)) for k, s in self.states.items()]
+                [s.import_variables(interpolate_vars(old_vars[k], new_vars[k], 0.2)) for k, s in self.states.items()]
 
             except StopIteration:
                 break
         end_vars = {k: s.export_variables() for k, s in self.states.items()}
         weight_diff = self.get_diff(start_vars, end_vars)
 
-        self.experiment.set_step(e)
+        #self.experiment.set_step(e)
         self.val_metrics["Weight Change"] = weight_diff
         self.experiment.log_metrics(self.val_metrics)
 
