@@ -25,7 +25,7 @@ class Data_Handler:
         # self.cats = self.coco.loadCats(self.coco.getCatIds())
         self.cat_ids = self.coco.getCatIds()
 
-        self.train_split = 0.95
+        self.train_split = 0.90
         self.group = group
         self.split_train_val()
 

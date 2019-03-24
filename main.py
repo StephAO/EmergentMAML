@@ -25,7 +25,7 @@ def converged(losses, precision=0.0001, prev_n=3):
     return True
 
 def save_models(exp_key, sender=True, receiver=True):
-    Agent.save_model(exp_key)
+    # Agent.save_model(exp_key)
     if sender:
         SenderAgent.save_model(exp_key)
     if receiver:
@@ -61,7 +61,7 @@ def main(epochs=50, task="reptile", D=31, K=10000, L=10, use_images=True, loss_t
     # Initialize TF
     variables_to_initialize = tf.global_variables()
     if load_key is not None:
-        dont_initialize = Agent.get_weights() + SenderAgent.get_weights() + ReceiverAgent.get_weights()
+        dont_initialize = Agent.get_all_weights() + SenderAgent.get_all_weights() + ReceiverAgent.get_all_weights()
         variables_to_initialize = [v for v in tf.global_variables() if v not in dont_initialize]
     Agent.sess.run(tf.variables_initializer(variables_to_initialize))
 

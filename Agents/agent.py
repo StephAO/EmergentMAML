@@ -39,17 +39,6 @@ class Agent(object):
     pre_trained = tf.keras.applications.mobilenet_v2.MobileNetV2(include_top=False, weights='imagenet', pooling='max',
                                                                  input_shape=(img_h, img_w, 3))
 
-    # Shared image fc layer
-    img_fc = tf.keras.layers.Dense(num_hidden, activation=tf.nn.tanh,
-                                   kernel_initializer=tf.glorot_uniform_initializer)
-    # img_fc = tf.make_template("img_fc", img_fc)
-    # img_fc.name = "shared_fc"
-    # Shared RNN cell
-    rnn_cell = tf.nn.rnn_cell.LSTMCell(num_hidden, initializer=tf.glorot_uniform_initializer)
-
-    # list to store MAML layers
-    layers = [img_fc, rnn_cell]
-
     # Create save/load directory
     base_dir = '/h/stephaneao/EmergentMAML' #os.path.dirname(sys.modules['__main__'].__file__)
     data_dir = base_dir + '/data/'
@@ -96,6 +85,24 @@ class Agent(object):
         """
         weights = []
         for l in cls.layers:
+            weights.extend(l.weights)
+        return weights
+
+    @classmethod
+    def get_shared_weights(cls):
+        """
+        returns a list of all weights shared by all agents
+        :return:
+        """
+        weights = []
+        for l in cls.shared_layers:
+            weights.extend(l.weights)
+        return weights
+
+    @classmethod
+    def get_all_weights(cls):
+        weights = []
+        for l in cls.layers + cls.shared_layers:
             weights.extend(l.weights)
         return weights
 
@@ -150,9 +157,9 @@ class Agent(object):
         self._build_optimizer()
 
         # Create saver
-        Agent.saver = Agent.saver or tf.train.Saver(var_list=Agent.get_weights())
-        if load_key is not None:
-            Agent.load_model(load_key)
+        # Agent.saver = Agent.saver or tf.train.Saver(var_list=Agent.get_all_weights())
+        # if load_key is not None:
+        #     Agent.load_model(load_key)
 
     def _cyclicLR(self):
         """

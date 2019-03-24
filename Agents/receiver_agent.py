@@ -12,7 +12,22 @@ def cosine_similarity(a, b, axis=1):
 
 
 class ReceiverAgent(Agent):
-    layers = []
+    # Used to map RNN output to RNN features
+    fc = tf.keras.layers.Dense(Agent.num_hidden, activation=tf.nn.tanh,
+                               kernel_initializer=tf.glorot_uniform_initializer)
+    layers = [fc]
+
+    # Shared image fc layer
+    img_fc = tf.keras.layers.Dense(Agent.num_hidden, activation=tf.nn.tanh,
+                                   kernel_initializer=tf.glorot_uniform_initializer)
+    # img_fc = tf.make_template("img_fc", img_fc)
+    # img_fc.name = "shared_fc"
+    # Shared RNN cell
+    rnn_cell = tf.nn.rnn_cell.LSTMCell(Agent.num_hidden, initializer=tf.glorot_uniform_initializer)
+
+    # list to store MAML layers
+    shared_layers = [img_fc, rnn_cell]
+
     saver = None
 
     def __init__(self, message, msg_len, load_key=None, *args, **kwargs):
@@ -21,7 +36,7 @@ class ReceiverAgent(Agent):
         self.msg_len = msg_len
         super().__init__(*args, **kwargs)
         # Create saver
-        ReceiverAgent.saver = ReceiverAgent.saver or tf.train.Saver(var_list=ReceiverAgent.get_weights())
+        ReceiverAgent.saver = ReceiverAgent.saver or tf.train.Saver(var_list=ReceiverAgent.get_all_weights())
         if load_key is not None:
             ReceiverAgent.load_model(load_key)
 
@@ -34,7 +49,7 @@ class ReceiverAgent(Agent):
         :return: None
         """
         # TODO: consider a better starting state for receiver
-        self.s0 = Agent.rnn_cell.zero_state(Agent.batch_size, dtype=tf.float32)
+        self.s0 = ReceiverAgent.rnn_cell.zero_state(Agent.batch_size, dtype=tf.float32)
 
     def _build_output(self):
         """
@@ -48,7 +63,7 @@ class ReceiverAgent(Agent):
         Get predicted image by finding image with the highest energy
         :return:
         """
-        self.rnn_outputs, self.final_state = tf.nn.dynamic_rnn(Agent.rnn_cell, self.message, initial_state=self.s0, time_major=True)
+        self.rnn_outputs, self.final_state = tf.nn.dynamic_rnn(ReceiverAgent.rnn_cell, self.message, initial_state=self.s0, time_major=True)
                                                                # sequence_length=self.msg_len, time_major=True)
         # Get RNN features
         # TODO consider using final rnn_output instead of final_state (not sure which is better)
@@ -56,11 +71,8 @@ class ReceiverAgent(Agent):
         #                                     kernel_initializer=tf.glorot_uniform_initializer)(self.final_state)
         # self.rnn_features = tf.keras.layers.Dense(self.num_hidden, activation=tf.nn.leaky_relu,
         #                                     kernel_initializer=tf.glorot_uniform_initializer)(self.rnn_features)
-        fc = tf.keras.layers.Dense(Agent.num_hidden, activation=tf.nn.tanh,
-                                   kernel_initializer=tf.glorot_uniform_initializer)
-        ReceiverAgent.layers.append(fc)
 
-        self.rnn_features = fc(self.final_state.c)
+        self.rnn_features = ReceiverAgent.fc(self.final_state.c)
 
         # TODO: consider adding noise to rnn features - is this different than just changing temperature?
         # self.rnn_features = tf.keras.layers.GaussianNoise(stddev=0.0001)(self.rnn_features)
@@ -84,7 +96,7 @@ class ReceiverAgent(Agent):
                 idx = tf.fill([self.batch_size], d)
                 img_feat = tf.one_hot(idx, Agent.D+1)
 
-            img_feat = Agent.img_fc(img_feat)
+            img_feat = ReceiverAgent.img_fc(img_feat)
 
             # TODO: Consider adding adding noise to imgage features - is this different than just changing temperature?
             self.image_features.append(img_feat)
@@ -140,7 +152,7 @@ class ReceiverAgent(Agent):
         self.accuracy = tf.reduce_mean(tf.cast(tf.equal(self.prediction, self.target_indices), tf.float32))
 
     def _build_optimizer(self):
-        self.base_train_op, self.sender_train_op, self.receiver_train_op = [
+        self.sender_train_op, self.receiver_train_op = [
             tf.contrib.layers.optimize_loss(
                 loss=self.loss,
                 global_step=Agent.step,
@@ -150,11 +162,11 @@ class ReceiverAgent(Agent):
                 clip_gradients=Agent.gradient_clip,
                 # only update receiver agent weights
                 variables=v)
-            for v in [Agent.get_weights(), SenderAgent.get_weights(), ReceiverAgent.get_weights()]
+            for v in [SenderAgent.get_all_weights(), ReceiverAgent.get_all_weights()]
         ]
 
     def get_train_ops(self):
-        return [self.base_train_op, self.sender_train_op, self.receiver_train_op]
+        return [self.sender_train_op, self.receiver_train_op]
 
     def get_output(self):
         return self.accuracy, self.loss

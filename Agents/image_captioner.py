@@ -40,7 +40,7 @@ class ImageCaptioner(SenderAgent):
             # some gradient clipping stabilizes training in the beginning.
             clip_gradients=self.gradient_clip,
             # only update image captioner weights
-            variables=Agent.get_weights() + ImageCaptioner.get_weights()
+            variables=ImageCaptioner.get_all_weights()
         )
 
     def get_output(self):

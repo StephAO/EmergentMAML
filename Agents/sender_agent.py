@@ -6,8 +6,20 @@ from utils.data_handler import img_h, img_w
 
 
 class SenderAgent(Agent):
+    # Used to map RNN output to RNN input
+    output_to_input = None
+    layers = None
+    # Shared image fc layer
+    img_fc = tf.keras.layers.Dense(Agent.num_hidden, activation=tf.nn.tanh,
+                                   kernel_initializer=tf.glorot_uniform_initializer)
+    # img_fc = tf.make_template("img_fc", img_fc)
+    # img_fc.name = "shared_fc"
+    # Shared RNN cell
+    rnn_cell = tf.nn.rnn_cell.LSTMCell(Agent.num_hidden, initializer=tf.glorot_uniform_initializer)
 
-    layers = []
+    # list to store MAML layers
+    shared_layers = [img_fc, rnn_cell]
+
     saver = None
 
     def __init__(self, straight_through=True, load_key=None, **kwargs):
@@ -15,9 +27,13 @@ class SenderAgent(Agent):
         # with tf.variable_scope("sender"):
         self.loss = None
         self.straight_through=straight_through
+        SenderAgent.output_to_input = SenderAgent.output_to_input or \
+                                      tf.layers.Dense(Agent.K, kernel_initializer=tf.glorot_uniform_initializer)
+        SenderAgent.layers = [SenderAgent.output_to_input]
+
         super().__init__(load_key=load_key, **kwargs)
         # Create saver
-        SenderAgent.saver = SenderAgent.saver or tf.train.Saver(var_list=SenderAgent.get_weights())
+        SenderAgent.saver = SenderAgent.saver or tf.train.Saver(var_list=SenderAgent.get_all_weights())
         if load_key is not None:
             SenderAgent.load_model(load_key)
 
@@ -65,13 +81,10 @@ class SenderAgent(Agent):
         Build output of agent from the output of the RNN
         :return:
         """
-        # Used to map RNN output to RNN input
-        output_to_input = tf.layers.Dense(Agent.K, kernel_initializer=tf.glorot_uniform_initializer)
-        SenderAgent.layers.append(output_to_input)
 
         # Decoder
         self.decoder = tf.contrib.seq2seq.BasicDecoder(self.rnn_cell, self.helper, initial_state=self.s0,
-                                                       output_layer=output_to_input)
+                                                       output_layer=SenderAgent.output_to_input)
 
         self.outputs, self.final_state, self.final_sequence_lengths = \
             tf.contrib.seq2seq.dynamic_decode(self.decoder, output_time_major=True, maximum_iterations=Agent.L)
