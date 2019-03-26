@@ -47,7 +47,10 @@ class ImageCaptioning:
                                                    auto_param_logging=False, auto_metric_logging=False,
                                                    disabled=(not track_results))
 
-        self.experiment.log_multiple_params(Agent.get_params())
+        self.params = {}
+        self.params.update(Agent.get_params())
+        self.params.update(self.dh.get_params())
+        self.experiment.log_parameters(self.params)
 
     def get_experiment_key(self):
         return self.experiment.get_key()
@@ -95,6 +98,8 @@ class ImageCaptioning:
 
         if mode == "val" and False:
             print(self.V.ids_to_tokens(prediction.T[0]))
+            print(self.V.ids_to_tokens(out_captions[0]))
+            print(self.V.ids_to_tokens(in_captions[0]))
             img = images[0]
             plt.axis('off')
             plt.imshow(img)

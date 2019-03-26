@@ -48,7 +48,10 @@ class ImageSelection:
                                                    project_name='Image Selection',
                                                    auto_param_logging=False, auto_metric_logging=False,
                                                    disabled=(not track_results))
-        self.experiment.log_multiple_params(Agent.get_params())
+        self.params = {}
+        self.params.update(Agent.get_params())
+        self.params.update(self.dh.get_params())
+        self.experiment.log_parameters(self.params)
 
 
     def get_experiment_key(self):
@@ -89,6 +92,7 @@ class ImageSelection:
         
         for i, ti in enumerate(target_indices):
             chosen_caption = captions[i][ti][np.random.randint(5)]
+            print(chosen_caption)
             tokens = chosen_caption.translate(str.maketrans('', '', string.punctuation))
             tokens = tokens.lower().split()
             target_caption_ids = self.V.tokens_to_ids(self.L, tokens)
@@ -100,6 +104,18 @@ class ImageSelection:
         self.image_selector.fill_feed_dict(fd, target_captions, candidates, target_indices)
         
         accuracy, loss = self.run_game(fd, mode=mode)
+
+        if mode == "val":
+            fig = plt.figure(figsize=(10, 10))
+            columns = 8
+            rows = 4
+            print(self.V.ids_to_tokens(chosen_caption))
+            print(target_indices[-1])
+            print(accuracy)
+            for i, img in enumerate(images):
+                fig.add_subplot(rows, columns, i+1)
+                plt.imshow(img[-1])
+            plt.show()
 
         return accuracy, loss
         

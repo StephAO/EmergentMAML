@@ -25,12 +25,12 @@ class Vocabulary:
         self.unk_id = 2
 
         # MSCOCO handler
-        self.coco_data_dir = '/h/stephaneao/cocoapi'
+        self.coco_data_dir = '/home/stephane/cocoapi'
         self.coco_dataType = 'train2014'
         self.coco_caption_file = '{}/annotations/captions_{}.json'.format(self.coco_data_dir, self.coco_dataType)
 
         # Load/Save
-        self.base_dir = '/h/stephaneao/EmergentMAML' #os.path.dirname(sys.modules['__main__'].__file__)
+        self.base_dir = '/home/stephane/EmergentMAML' #os.path.dirname(sys.modules['__main__'].__file__)
         self.data_dir = self.base_dir + '/data/'
         if not os.path.exists(self.data_dir):
             os.makedirs(self.data_dir)

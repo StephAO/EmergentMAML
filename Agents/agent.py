@@ -1,7 +1,7 @@
 import tensorflow as tf
 import os
 import sys
-from utils.data_handler import img_w, img_h
+from utils.data_handler import img_w, img_h, project_path
 
 
 class Agent(object):
@@ -15,9 +15,9 @@ class Agent(object):
     L = None  # Maximum message length
 
     # MODEL PARAMETERS
-    freeze_cnn = True
+    freeze_cnn = False
     num_hidden = 512
-    batch_size = 128
+    batch_size = 64
     batch_shape = (batch_size, img_h, img_w, 3)
 
     # TRAINING PARAMETERS
@@ -40,7 +40,7 @@ class Agent(object):
                                                                  input_shape=(img_h, img_w, 3))
 
     # Create save/load directory
-    base_dir = '/h/stephaneao/EmergentMAML' #os.path.dirname(sys.modules['__main__'].__file__)
+    base_dir = project_path
     data_dir = base_dir + '/data/'
     if not os.path.exists(data_dir):
         os.makedirs(data_dir)

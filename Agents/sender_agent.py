@@ -95,7 +95,6 @@ class SenderAgent(Agent):
         # TODO: consider annealing temperature
         # self.temperature = tf.clip_by_value(10000. / tf.cast(self.epoch, tf.float32), 0.5, 10.)
 
-        # Gumbel Softmax TODO: use gumbel softmax straight through used in https://arxiv.org/abs/1705.11192
         self.dist = tfp.distributions.RelaxedOneHotCategorical(Agent.temperature, logits=self.rnn_outputs)
         self.message = self.dist.sample()
 

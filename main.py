@@ -31,39 +31,52 @@ def save_models(exp_key, sender=True, receiver=True):
     if receiver:
         ReceiverAgent.save_model(exp_key)
 
-def main(epochs=50, task="reptile", D=31, K=10000, L=10, use_images=True, loss_type='pairwise'):
+def main(epochs=50, task="ic", D=31, K=10000, L=10, use_images=True, loss_type='pairwise'):
     """
     Run epochs of games
     :return:
     """
-    load_key=None
+    load_key=None#"23c353ddf0e545ccbd86ad7babeaf09e"
 
     Agent.set_params(K=K, D=D, L=L, loss_type=loss_type)
     dh = Data_Handler(batch_size=Agent.batch_size, group=False)
+
+    s, r = False, False
 
     if task.lower() in ["rg", "referential game", "referential_game", "referentialgame"]:
         s = SenderAgent(load_key=load_key)
         r = ReceiverAgent(*s.get_output(), load_key=load_key)
         t = ReferentialGame(s, r, dh)
         dh.set_params(images_per_instance=D + 1)
+        s, r = True, True
     elif task.lower() in ["ic", "image captioning", "image_captioning", "imagecaptioning"]:
         ic = ImageCaptioner(load_key=load_key)
         t = ImageCaptioning(ic, dh)
+        s = True
     elif task.lower() in ["is", "image selection", "image_selection", "imageselection"]:
         is_ = ImageSelector(load_key=load_key)
         t = ImageSelection(is_, dh)
         dh.set_params(images_per_instance=D + 1)
+        r = True
     elif task.lower() in ["r", "reptile"]:
         t = Reptile(dh)
+        s, r = True
     else:
         raise ValueError("Unknown task {}, select from ['referential_game', 'image_captioning']".format(task))
 
     # Initialize TF
     variables_to_initialize = tf.global_variables()
     if load_key is not None:
-        dont_initialize = Agent.get_all_weights() + SenderAgent.get_all_weights() + ReceiverAgent.get_all_weights()
+        dont_initialize = []
+        if s:
+            dont_initialize += SenderAgent.get_all_weights()
+        if r:
+            dont_initialize += ReceiverAgent.get_all_weights()
         variables_to_initialize = [v for v in tf.global_variables() if v not in dont_initialize]
+
     Agent.sess.run(tf.variables_initializer(variables_to_initialize))
+
+    print(len(tf.trainable_variables()))
 
     exp_key = t.get_experiment_key()
     losses = []
@@ -78,16 +91,16 @@ def main(epochs=50, task="reptile", D=31, K=10000, L=10, use_images=True, loss_t
         print("Training epoch {0}".format(e))
         accuracy, loss = t.train_epoch(e, mode="train")
         print("\rloss: {0:1.4f}, accuracy: {1:5.2f}%".format(loss, accuracy * 100), end="\n")
-        #print("Validating epoch {0}".format(e))
-        #accuracy, loss = t.train_epoch(e, mode="val")
-        #print("\rloss: {0:1.4f}, accuracy: {1:5.2f}%".format(loss, accuracy * 100), end="\n")
-        #losses.append(loss)
+        print("Validating epoch {0}".format(e))
+        accuracy, loss = t.train_epoch(e, mode="val")
+        print("\rloss: {0:1.4f}, accuracy: {1:5.2f}%".format(loss, accuracy * 100), end="\n")
+        losses.append(loss)
 
         # End training if 100% communication rate or convergence reached on loss
         if accuracy == 1.0 or converged(losses):
             break
 
-        save_models(exp_key)
+        save_models(exp_key, sender=s, receiver=r)
 
     Agent.sess.close()
 

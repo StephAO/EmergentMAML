@@ -4,8 +4,10 @@ from pycocotools.coco import COCO
 from skimage import io, transform
 
 # TODO: consider moving this to a better spot
-img_h = 96
-img_w = 96
+img_h = 128
+img_w = 128
+coco_path = '/home/stephane/cocoapi'
+project_path = '/home/stephane/PycharmProjects/EmergentMAML'
 
 class Data_Handler:
 
@@ -13,7 +15,7 @@ class Data_Handler:
         self.images_per_instance = images_per_instance
         self.batch_size = batch_size
         self.images_per_batch = self.images_per_instance * self.batch_size
-        self.data_dir = '/h/stephaneao/cocoapi'
+        self.data_dir = coco_path
         self.dataType = 'train2014'
         self.data_file = '{}/annotations/instances_{}.json'.format(self.data_dir, self.dataType)
         self.caption_file = '{}/annotations/captions_{}.json'.format(self.data_dir, self.dataType)
@@ -28,6 +30,17 @@ class Data_Handler:
         self.train_split = 0.90
         self.group = group
         self.split_train_val()
+
+    def get_params(self):
+        """
+        Returns a dictionary of parameters to track.
+        """
+        params = {
+            "train_split": self.train_split,
+            "grouping" : self.group,
+        }
+
+        return params
 
     def split_train_val(self):
         all_img_ids = self.coco.getImgIds()
