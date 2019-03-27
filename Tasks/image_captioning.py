@@ -5,7 +5,6 @@ import numpy as np
 from comet_ml import Experiment
 
 from Agents.agent import Agent
-from utils.vocabulary import Vocabulary as V
 
 
 class ImageCaptioning:
@@ -29,15 +28,7 @@ class ImageCaptioning:
         self.run_ops = list(self.image_captioner.get_output()) + [Agent.step]
         self.train_ops = self.image_captioner.get_train_ops()
 
-        # Set up vocabulary
-        self.V = V()
-        try:
-            self.V.load_vocab()
-        except FileNotFoundError:
-            self.V.generate_vocab()
-            self.V.save_vocab()
-        
-        self.V.generate_top_k(self.K)
+        self.V = Agent.V
 
         self.track_results = track_results
         self.train_metrics = {}
@@ -89,11 +80,11 @@ class ImageCaptioning:
         """
         fd = {}
 
-        in_captions, out_captions = self.get_useable_captions(captions)
+        in_captions, out_captions, loss_weights = self.get_useable_captions(captions)
 
         images = np.squeeze(images)
 
-        self.image_captioner.fill_feed_dict(fd, images, in_captions, out_captions)
+        self.image_captioner.fill_feed_dict(fd, images, in_captions, out_captions, loss_weights)
         accuracy, loss, prediction = self.run_game(fd, mode=mode)
 
         if mode == "val":
@@ -112,19 +103,21 @@ class ImageCaptioning:
 
         in_captions = np.zeros((self.image_captioner.batch_size, self.L))
         out_captions = np.zeros((self.image_captioner.batch_size, self.L))
+        loss_weights = np.zeros((self.image_captioner.batch_size, self.L))
 
         for i, caption in enumerate(captions):
             # Randomly select caption to use
             chosen_caption = caption[0][np.random.randint(5)]
             tokens = chosen_caption.translate(str.maketrans('', '', string.punctuation))
             tokens = tokens.lower().split()
+            loss_weights[i] = self.V.get_weights(self.L, tokens)
             out = self.V.tokens_to_ids(self.L, tokens)
             in_ = np.roll(out, 1)
             in_[0] = self.V.sos_id
             out_captions[i] = out
             in_captions[i] = in_
 
-        return in_captions, out_captions
+        return in_captions, out_captions, loss_weights
 
     def run_game(self, fd, mode="train"):
         ops = self.run_ops

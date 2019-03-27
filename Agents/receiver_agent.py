@@ -48,8 +48,14 @@ class ReceiverAgent(Agent):
             - Inputs the message passed from the sender
         :return: None
         """
+        self.embedding = tf.get_variable(
+            name="map",
+            shape=[Agent.K, Agent.emb_size],
+            initializer=tf.initializers.glorot_normal)
+        self.msg_embeddings = tf.nn.embedding_lookup(self.embedding, self.message)
         # TODO: consider a better starting state for receiver
         self.s0 = ReceiverAgent.rnn_cell.zero_state(Agent.batch_size, dtype=tf.float32)
+
 
     def _build_output(self):
         """
@@ -63,7 +69,7 @@ class ReceiverAgent(Agent):
         Get predicted image by finding image with the highest energy
         :return:
         """
-        self.rnn_outputs, self.final_state = tf.nn.dynamic_rnn(ReceiverAgent.rnn_cell, self.message, initial_state=self.s0, time_major=True)
+        self.rnn_outputs, self.final_state = tf.nn.dynamic_rnn(ReceiverAgent.rnn_cell, self.msg_embeddings, initial_state=self.s0, time_major=True)
                                                                # sequence_length=self.msg_len, time_major=True)
         # Get RNN features
         # TODO consider using final rnn_output instead of final_state (not sure which is better)
@@ -85,12 +91,12 @@ class ReceiverAgent(Agent):
 
         for d in range(Agent.D + 1):
             if self.use_images:
-                can = tf.placeholder(tf.float32, shape=(Agent.batch_size, img_h, img_w, 3))
+                can = tf.placeholder(tf.float32, shape=(Agent.batch_size, 2048))
                 self.candidates.append(can)
-                img_feat = Agent.pre_trained(can)
-                if self.freeze_cnn:
-                    img_feat = tf.stop_gradient(img_feat)
-                img_feat = img_feat / tf.maximum(tf.reduce_max(img_feat, axis=1, keepdims=True), Agent.epsilon)
+                # img_feat = Agent.pre_trained(can)
+                # if self.freeze_cnn:
+                #     img_feat = tf.stop_gradient(img_feat)
+                img_feat = can / tf.maximum(tf.reduce_max(tf.abs(can), axis=1, keepdims=True), Agent.epsilon)
 
             else:  # use one-hot encoding
                 idx = tf.fill([self.batch_size], d)
@@ -98,7 +104,7 @@ class ReceiverAgent(Agent):
 
             img_feat = ReceiverAgent.img_fc(img_feat)
 
-            # TODO: Consider adding adding noise to imgage features - is this different than just changing temperature?
+            # TODO: Consider adding adding noise to image features - is this different than just changing temperature?
             self.image_features.append(img_feat)
 
             # Define energies

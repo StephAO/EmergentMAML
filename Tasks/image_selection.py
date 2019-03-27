@@ -86,7 +86,7 @@ class ImageSelection:
     def train_batch(self, images, captions, mode="train"):
         
         target_indices = np.random.randint(self.D + 1, size=self.batch_size)
-        target_captions = np.zeros((self.L, self.batch_size, self.K))
+        target_captions = np.zeros((self.batch_size, self.L))
         
         candidates = images
         

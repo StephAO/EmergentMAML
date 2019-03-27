@@ -15,6 +15,7 @@ class Vocabulary:
         self.vocabulary = {}
         self.reverse_vocabulary = {}
         self.vocabulary_counter = {}
+        self.vocabulary_counter_ = {}
 
         # special tokens
         self.sos = '<s>'
@@ -85,9 +86,10 @@ class Vocabulary:
         c = Counter(self.vocabulary_counter)
         id = 3
         # create dictionary so that index
-        for tok, _ in c.most_common(k - 3):
+        for tok, count in c.most_common(k - 3):
             self.vocabulary[tok] = id
             self.reverse_vocabulary[id] = tok
+            self.vocabulary_counter_[tok] = count
             id += 1
     
     def get_id(self, token):
@@ -122,6 +124,12 @@ class Vocabulary:
             idx += 1
 
         return ids
+
+    def get_weights(self, L, tokens):
+        weights = np.zeros(L)
+        weights[:len(tokens)] = 1
+        # weights[0] = 0.1
+        return weights
     
     def ids_to_tokens(self, ids):
         """

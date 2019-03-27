@@ -2,6 +2,8 @@ import tensorflow as tf
 import os
 import sys
 from utils.data_handler import img_w, img_h, project_path
+from utils.vocabulary import Vocabulary as V
+
 
 
 class Agent(object):
@@ -18,7 +20,7 @@ class Agent(object):
     freeze_cnn = False
     num_hidden = 512
     batch_size = 1024
-    batch_shape = (batch_size, img_h, img_w, 3)
+    emb_size = 300
 
     # TRAINING PARAMETERS
     step = tf.train.get_or_create_global_step()
@@ -44,6 +46,9 @@ class Agent(object):
     data_dir = base_dir + '/data/'
     if not os.path.exists(data_dir):
         os.makedirs(data_dir)
+
+    # Set up vocabulary
+    V = None
 
     @staticmethod
     def set_params(K=None, D=None, L=None, lr=None, loss_type=None, batch_size=None, num_hidden=None, temperature=None):
@@ -137,14 +142,19 @@ class Agent(object):
         if not (Agent.K and Agent.L and Agent.D):
             raise ValueError("Set static agent parameters using Agent.set_params() before creating any agent instances")
 
+        # Create vocabulary
+        if Agent.V is None:
+            Agent.V = V()
+            try:
+                Agent.V.load_vocab()
+            except FileNotFoundError:
+                Agent.V.generate_vocab()
+                Agent.V.save_vocab()
+
+            Agent.V.generate_top_k(Agent.K)
+
         # TODO deal with hyper parameters better
         self.use_images = use_images
-
-        # TODO: properly define start/end tokens
-        # Currently setting start token to [1, 0, 0, ...., 0]
-        # And end token to [0, 1, 0, 0, ..., 0]
-        self.sos_token = tf.one_hot(0, Agent.K)
-        self.eos_token = tf.one_hot(1, Agent.K)
 
         # All agents need a train_op
         self.train_op = None
@@ -155,11 +165,6 @@ class Agent(object):
         self._build_output()
         self._build_losses()
         self._build_optimizer()
-
-        # Create saver
-        # Agent.saver = Agent.saver or tf.train.Saver(var_list=Agent.get_all_weights())
-        # if load_key is not None:
-        #     Agent.load_model(load_key)
 
     def _cyclicLR(self):
         """

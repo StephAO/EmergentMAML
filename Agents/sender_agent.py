@@ -46,6 +46,12 @@ class SenderAgent(Agent):
             - First input is a start of sentence token (sos), followed by the output of the previous timestep
         :return:
         """
+        self.embedding = tf.get_variable(
+            name="map",
+            shape=[Agent.K, Agent.emb_size],
+            initializer=tf.initializers.glorot_normal)
+
+
         if self.use_images:
             # Determine starting state
             self.target_image = tf.placeholder(tf.float32, shape=(Agent.batch_size, 2048))
@@ -63,7 +69,7 @@ class SenderAgent(Agent):
         self.L_pre_feat = tf.keras.layers.RepeatVector(self.L)(self.pre_feat)
         self.s0 = tf.nn.rnn_cell.LSTMStateTuple(self.pre_feat, self.pre_feat)
 
-        self.starting_tokens = tf.stack([self.sos_token] * Agent.batch_size)
+        self.starting_tokens = tf.stack([Agent.V.sos_id] * Agent.batch_size)
         # Determines input to decoder at next time step
         # TODO: define a end_fn that actually has a chance of triggering so that we can variable len messages
         # TODO do this better
@@ -78,6 +84,23 @@ class SenderAgent(Agent):
         #                                                  next_inputs_fn = self.next_inputs_fn
         #                                                  )
 
+
+        self.helper = tf.contrib.seq2seq.GreedyEmbeddingHelper(self.embedding, self.starting_tokens, Agent.V.eos_id)
+
+        # TODO add attention?
+        # self.attention = tf.contrib.seq2seq.BahdanauAttention(Agent.num_hidden, self.pre_feat, self.L)
+        #
+        # SenderAgent.rnn_cell = tf.contrib.seq2seq.AttentionWrapper(
+        #     cell=SenderAgent.rnn_cell,
+        #     attention_mechanism=self.attention,
+        #     attention_layer_size=Agent.num_hidden,
+        #     cell_input_fn= tf.keras.layers.Dense(Agent.num_hidden)(self.input),
+        #     initial_cell_state=self.pre_feat,
+        #     alignment_history=False,
+        #     name='Attention_Wrapper')
+
+
+
     def _build_output(self):
         """
         Build output of agent from the output of the RNN
@@ -85,24 +108,27 @@ class SenderAgent(Agent):
         """
 
         # Decoder
-        # self.decoder = tf.contrib.seq2seq.BasicDecoder(self.rnn_cell, self.helper, initial_state=self.s0,
-        #                                                output_layer=SenderAgent.output_to_input)
-        #
-        # self.outputs, self.final_state, self.final_sequence_lengths = \
-        #     tf.contrib.seq2seq.dynamic_decode(self.decoder, output_time_major=True, maximum_iterations=Agent.L)
+        self.decoder = tf.contrib.seq2seq.BasicDecoder(self.rnn_cell, self.helper, initial_state=self.s0)
+                                                       # output_layer=SenderAgent.output_to_input)
 
-        outputs, state = tf.nn.dynamic_rnn(cell=SenderAgent.rnn_cell,
-                                            inputs=self.input,
-                                            # sequence_length=sequence_length,
-                                            initial_state=self.s0,
-                                            dtype=tf.float32)
+
+
+        self.outputs, self.final_state, self.final_sequence_lengths = \
+            tf.contrib.seq2seq.dynamic_decode(self.decoder, maximum_iterations=Agent.L) #output_time_major=True,
+
+        # outputs, state = tf.nn.dynamic_rnn(cell=SenderAgent.rnn_cell,
+        #                                     inputs=self.input,
+        #                                     # sequence_length=sequence_length,
+        #                                     initial_state=self.s0,
+        #                                     dtype=tf.float32)
 
 
 
         # Select rnn_outputs from rnn_outputs: see
         # https://www.tensorflow.org/api_docs/python/tf/contrib/seq2seq/BasicDecoderOutput
-        print(outputs.shape)
-        self.rnn_outputs = SenderAgent.output_to_input(outputs)
+        # print(outputs.shape)
+        # print(self.outputs.rnn_output.shape)
+        self.rnn_outputs = SenderAgent.output_to_input(self.outputs.rnn_output)
 
         # TODO: consider annealing temperature
         # self.temperature = tf.clip_by_value(10000. / tf.cast(self.epoch, tf.float32), 0.5, 10.)
