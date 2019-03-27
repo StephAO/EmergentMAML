@@ -116,8 +116,8 @@ class Vocabulary:
                 break
             # TODO not sure if this a good or bad thing
             # Avoid uninformative tokens
-            if tok in ["", "a", "an", "the"]:
-                continue
+            # if tok in ["", "a", "an", "the"]:
+            #     continue
             ids[idx] = self.get_id(tok)
             idx += 1
 

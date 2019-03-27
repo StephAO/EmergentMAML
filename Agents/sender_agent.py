@@ -10,7 +10,7 @@ class SenderAgent(Agent):
     output_to_input = None
     layers = None
     # Shared image fc layer
-    img_fc = tf.keras.layers.Dense(Agent.num_hidden, activation=tf.nn.tanh,
+    img_fc = tf.keras.layers.Dense(Agent.num_hidden,
                                    kernel_initializer=tf.glorot_uniform_initializer)
     # img_fc = tf.make_template("img_fc", img_fc)
     # img_fc.name = "shared_fc"
@@ -48,33 +48,35 @@ class SenderAgent(Agent):
         """
         if self.use_images:
             # Determine starting state
-            self.target_image = tf.placeholder(tf.float32, shape=(Agent.batch_size, img_h, img_w, 3))
-            self.pre_feat = Agent.pre_trained(self.target_image)
-            if self.freeze_cnn:
-                self.pre_feat = tf.stop_gradient(self.pre_feat)
-            self.pre_feat = self.pre_feat / tf.maximum(tf.reduce_max(self.pre_feat, axis=1, keepdims=True), Agent.epsilon)
+            self.target_image = tf.placeholder(tf.float32, shape=(Agent.batch_size, 2048))
+            # self.pre_feat = Agent.pre_trained(self.target_image)
+            # if self.freeze_cnn:
+            #     self.pre_feat = tf.stop_gradient(self.pre_feat)
+            self.pre_feat = self.target_image / tf.maximum(tf.reduce_max(tf.abs(self.target_image), axis=1, keepdims=True), Agent.epsilon)
 
         else: # Use one-hot encoding
             self.target_image = tf.placeholder(tf.int32, shape=(Agent.batch_size))
             self.pre_feat = tf.one_hot(self.target_image, Agent.D+1)
 
-        self.s0 = tf.nn.rnn_cell.LSTMStateTuple(self.img_fc(self.pre_feat),
-                                                tf.zeros((Agent.batch_size, Agent.num_hidden), dtype=tf.float32))
+
+        self.pre_feat = self.img_fc(self.target_image)
+        self.L_pre_feat = tf.keras.layers.RepeatVector(self.L)(self.pre_feat)
+        self.s0 = tf.nn.rnn_cell.LSTMStateTuple(self.pre_feat, self.pre_feat)
 
         self.starting_tokens = tf.stack([self.sos_token] * Agent.batch_size)
         # Determines input to decoder at next time step
         # TODO: define a end_fn that actually has a chance of triggering so that we can variable len messages
         # TODO do this better
-        self.sample_fn = lambda outputs: outputs #tf.one_hot(tf.squeeze(tf.random.multinomial(tf.log(tf.nn.softmax(outputs)), 1)), Agent.K, axis=1)
-        self.next_inputs_fn = lambda outputs: tf.one_hot(tf.squeeze(tf.random.multinomial(tf.log(tf.nn.softmax(outputs)), 1)), Agent.K, axis=1)
-        self.helper = tf.contrib.seq2seq.InferenceHelper(sample_fn=self.sample_fn,
-                                                         sample_shape=[Agent.K],
-                                                         sample_dtype=tf.float32,
-                                                         start_inputs=self.starting_tokens,
-                                                         end_fn=lambda sample_ids:
-                                                            tf.reduce_all(tf.equal(sample_ids, self.eos_token)),
-                                                         next_inputs_fn = self.next_inputs_fn
-                                                         )
+        # self.sample_fn = lambda outputs: outputs #tf.one_hot(tf.squeeze(tf.random.multinomial(tf.log(tf.nn.softmax(outputs)), 1)), Agent.K, axis=1)
+        # self.next_inputs_fn = lambda outputs: tf.one_hot(tf.squeeze(tf.random.multinomial(tf.log(tf.nn.softmax(outputs)), 1)), Agent.K, axis=1)
+        # self.helper = tf.contrib.seq2seq.InferenceHelper(sample_fn=self.sample_fn,
+        #                                                  sample_shape=[Agent.K],
+        #                                                  sample_dtype=tf.float32,
+        #                                                  start_inputs=self.starting_tokens,
+        #                                                  end_fn=lambda sample_ids:
+        #                                                     tf.reduce_all(tf.equal(sample_ids, self.eos_token)),
+        #                                                  next_inputs_fn = self.next_inputs_fn
+        #                                                  )
 
     def _build_output(self):
         """
@@ -83,14 +85,24 @@ class SenderAgent(Agent):
         """
 
         # Decoder
-        self.decoder = tf.contrib.seq2seq.BasicDecoder(self.rnn_cell, self.helper, initial_state=self.s0,
-                                                       output_layer=SenderAgent.output_to_input)
+        # self.decoder = tf.contrib.seq2seq.BasicDecoder(self.rnn_cell, self.helper, initial_state=self.s0,
+        #                                                output_layer=SenderAgent.output_to_input)
+        #
+        # self.outputs, self.final_state, self.final_sequence_lengths = \
+        #     tf.contrib.seq2seq.dynamic_decode(self.decoder, output_time_major=True, maximum_iterations=Agent.L)
 
-        self.outputs, self.final_state, self.final_sequence_lengths = \
-            tf.contrib.seq2seq.dynamic_decode(self.decoder, output_time_major=True, maximum_iterations=Agent.L)
+        outputs, state = tf.nn.dynamic_rnn(cell=SenderAgent.rnn_cell,
+                                            inputs=self.input,
+                                            # sequence_length=sequence_length,
+                                            initial_state=self.s0,
+                                            dtype=tf.float32)
+
+
+
         # Select rnn_outputs from rnn_outputs: see
         # https://www.tensorflow.org/api_docs/python/tf/contrib/seq2seq/BasicDecoderOutput
-        self.rnn_outputs = self.outputs.rnn_output
+        print(outputs.shape)
+        self.rnn_outputs = SenderAgent.output_to_input(outputs)
 
         # TODO: consider annealing temperature
         # self.temperature = tf.clip_by_value(10000. / tf.cast(self.epoch, tf.float32), 0.5, 10.)
@@ -102,7 +114,7 @@ class SenderAgent(Agent):
             self.message_hard = tf.cast(tf.one_hot(tf.argmax(self.message, -1), self.K), self.message.dtype)
             self.message = tf.stop_gradient(self.message_hard - self.message) + self.message
 
-        self.prediction = tf.argmax(self.message, axis=2, output_type=tf.int32)
+        self.prediction = tf.argmax(tf.nn.softmax(self.rnn_outputs), axis=2, output_type=tf.int32)
 
     def get_output(self):
         return self.message, self.final_sequence_lengths

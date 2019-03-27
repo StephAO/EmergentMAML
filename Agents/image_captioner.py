@@ -13,7 +13,18 @@ class ImageCaptioner(SenderAgent):
         self.out_captions = tf.placeholder(tf.int32, shape=(self.batch_size, self.L))
 
         super()._build_input()
-        self.helper = tf.contrib.seq2seq.TrainingHelper(tf.one_hot(self.in_captions, self.K), [self.L]*self.batch_size)
+
+        self.embedding_map = tf.get_variable(
+            name="map",
+            shape=[self.K, 300],
+            initializer=tf.initializers.glorot_normal)
+        seq_embeddings = tf.nn.embedding_lookup(self.embedding_map, self.in_captions)
+
+        self.seq_embeddings = seq_embeddings
+
+        self.input = tf.concat((seq_embeddings, self.L_pre_feat), axis=2) # (tf.one_hot(self.in_captions, self.K)
+        print(self.input.shape)
+        # self.helper = tf.contrib.seq2seq.TrainingHelper(self.input, [self.L]*self.batch_size)
     
     def _build_losses(self):
         """ 
@@ -29,9 +40,10 @@ class ImageCaptioner(SenderAgent):
             average_across_timesteps=True,
             average_across_batch=True)
 
-        self.accuracy = tf.reduce_mean(tf.cast(tf.equal(self.prediction, tf.transpose(self.out_captions)), tf.float32))
+        self.accuracy = tf.reduce_mean(tf.cast(tf.equal(self.prediction, self.out_captions), tf.float32))
 
     def _build_optimizer(self):
+        print(ImageCaptioner.get_all_weights() + [self.embedding_map])
         self.train_op = tf.contrib.layers.optimize_loss(
             loss=self.loss,
             global_step=Agent.step,
@@ -40,7 +52,7 @@ class ImageCaptioner(SenderAgent):
             # some gradient clipping stabilizes training in the beginning.
             clip_gradients=self.gradient_clip,
             # only update image captioner weights
-            variables=ImageCaptioner.get_all_weights()
+            variables=ImageCaptioner.get_all_weights() + [self.embedding_map]
         )
 
     def get_output(self):

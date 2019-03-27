@@ -17,7 +17,7 @@ class Agent(object):
     # MODEL PARAMETERS
     freeze_cnn = False
     num_hidden = 512
-    batch_size = 64
+    batch_size = 1024
     batch_shape = (batch_size, img_h, img_w, 3)
 
     # TRAINING PARAMETERS
@@ -36,8 +36,8 @@ class Agent(object):
     sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
 
     #  Shared CNN pre-trained on imagenet, see https://github.com/keras-team/keras-applications for other options
-    pre_trained = tf.keras.applications.mobilenet_v2.MobileNetV2(include_top=False, weights='imagenet', pooling='max',
-                                                                 input_shape=(img_h, img_w, 3))
+    # pre_trained = tf.keras.applications.inception_v3.InceptionV3(include_top=False, weights='imagenet', pooling='max',
+    #                                                              input_shape=(img_h, img_w, 3))
 
     # Create save/load directory
     base_dir = project_path

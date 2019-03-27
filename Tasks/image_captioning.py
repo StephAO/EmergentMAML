@@ -96,14 +96,15 @@ class ImageCaptioning:
         self.image_captioner.fill_feed_dict(fd, images, in_captions, out_captions)
         accuracy, loss, prediction = self.run_game(fd, mode=mode)
 
-        if mode == "val" and False:
-            print(self.V.ids_to_tokens(prediction.T[0]))
+        if mode == "val":
+            print(self.V.ids_to_tokens(prediction[0]))
             print(self.V.ids_to_tokens(out_captions[0]))
             print(self.V.ids_to_tokens(in_captions[0]))
-            img = images[0]
-            plt.axis('off')
-            plt.imshow(img)
-            plt.show()
+            print("----------------------------------")
+            # img = images[0]
+            # plt.axis('off')
+            # plt.imshow(img)
+            # plt.show()
 
         return accuracy, loss
         

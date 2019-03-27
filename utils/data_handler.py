@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pycocotools.coco import COCO
 from skimage import io, transform
+import pickle
 
 # TODO: consider moving this to a better spot
 img_h = 128
@@ -114,7 +115,7 @@ class Data_Handler:
             total += len(data)
 
         while self.group or data_idx + self.images_per_batch < len(data):
-            img_batches = np.zeros((self.images_per_instance, self.batch_size, img_h, img_w, 3), dtype=np.float32)
+            img_batches = np.zeros((self.images_per_instance, self.batch_size, 2048), dtype=np.float32)
             cap_batches = []
             for b in range(self.batch_size):
                 if self.group and self.images_per_instance > len(data_idx):
@@ -136,20 +137,19 @@ class Data_Handler:
                     else:
                         img_id = data[data_idx]
                         data_idx += 1
-                    img = self.coco.loadImgs(img_id)[0]
-                    img = io.imread('{}/images/{}/{}'.format(self.data_dir, self.dataType, img['file_name']))
+                    # img = self.coco.loadImgs(img_id)[0]
+                    # img = io.imread('{}/images/{}/{}'.format(self.data_dir, self.dataType, img['file_name']))
+                    #
+                    # # Increase channels (by copying) of bw images that don't have 3 channels
+                    # while img.shape[-1] != 3:
+                    #     img = np.repeat(img[:, :, np.newaxis], 3, axis=2)
+                    #
+                    # img = transform.resize(img, (img_h, img_w), anti_aliasing=True, mode='reflect')
+                    # with open('{}/images/{}/{}'.format(self.data_dir, 'train_feats', img['file_name']), "rb") as f:
+                    #     img = pickle.load(f)
 
-                    # Increase channels (by copying) of bw images that don't have 3 channels
-                    while img.shape[-1] != 3:
-                        img = np.repeat(img[:, :, np.newaxis], 3, axis=2)
 
-                    img = transform.resize(img, (img_h, img_w), anti_aliasing=True, mode='reflect')
 
-                    # plt.axis('off')
-                    # plt.imshow(img)
-                    # plt.show()
-
-                    img_batches[i, b] = img
                     if return_captions:
                         img_captions = []
                         ann_id = self.coco_capts.getAnnIds(imgIds=img_id)
@@ -157,6 +157,17 @@ class Data_Handler:
                         for a in anns:
                             img_captions.append(a['caption'])
                         captions.append(img_captions)
+
+                    # print(img_captions)
+                    # plt.axis('off')
+                    # plt.imshow(img)
+                    # plt.show()
+
+                    img = self.coco.loadImgs(img_id)[0]
+                    with open('{}/images/{}/{}'.format(self.data_dir, 'train_feats', img['file_name']), "rb") as f:
+                        img = pickle.load(f)
+
+                    img_batches[i, b] = img
 
                 if return_captions:
                     cap_batches.append(captions)
