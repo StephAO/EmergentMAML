@@ -39,10 +39,10 @@ class ReferentialGame:
         # Set up vocabulary
         self.V = V()
         try:
-            self.V.load_vocab()
+            self.V.load_counter()
         except FileNotFoundError:
             self.V.generate_vocab()
-            self.V.save_vocab()
+            self.V.save_counter()
 
         self.V.generate_top_k(self.K)
 

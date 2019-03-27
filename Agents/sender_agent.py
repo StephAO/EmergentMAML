@@ -48,11 +48,9 @@ class SenderAgent(Agent):
         """
         if self.use_images:
             # Determine starting state
-            self.target_image = tf.placeholder(tf.float32, shape=(Agent.batch_size, img_h, img_w, 3))
-            self.pre_feat = Agent.pre_trained(self.target_image)
-            if self.freeze_cnn:
-                self.pre_feat = tf.stop_gradient(self.pre_feat)
+            self.target_image = tf.placeholder(tf.float32, shape=(Agent.batch_size, Agent.pretrained_size))
             self.pre_feat = self.pre_feat / tf.maximum(tf.reduce_max(self.pre_feat, axis=1, keepdims=True), Agent.epsilon)
+            self.pre_feat = tf.keras.layers.RepeatVector(self.pre_feat, self.L)
 
         else: # Use one-hot encoding
             self.target_image = tf.placeholder(tf.int32, shape=(Agent.batch_size))

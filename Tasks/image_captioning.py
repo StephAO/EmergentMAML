@@ -12,7 +12,7 @@ class ImageCaptioning:
     """
     Class for running the image captioner
     """
-    def __init__(self, image_captioner, data_handler=None, track_results=True, experiment=None):
+    def __init__(self, image_captioner, data_handler=None, track_results=False, experiment=None):
         """ 
         Initialize this Image Captioning task
         """
@@ -30,14 +30,16 @@ class ImageCaptioning:
         self.train_ops = self.image_captioner.get_train_ops()
 
         # Set up vocabulary
-        self.V = V()
+        self.V = V(Agent.emb_size)
         try:
-            self.V.load_vocab()
+            self.V.load_counter()
         except FileNotFoundError:
             self.V.generate_vocab()
-            self.V.save_vocab()
+            self.V.save_counter()
         
         self.V.generate_top_k(self.K)
+
+        self.image_captioner.set_embedding(self.V.idx_to_emb)
 
         self.track_results = track_results
         self.train_metrics = {}

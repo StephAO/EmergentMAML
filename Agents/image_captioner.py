@@ -5,6 +5,11 @@ from .sender_agent import SenderAgent
 
 class ImageCaptioner(SenderAgent):
 
+    def set_embedding(self, embedding):
+        self.embedding_placeholder = tf.placeholder(tf.float32, shape=(Agent.K, Agent.emb_size))
+        self.embedding_init = self.embedding.assign(self.embedding_placeholder)
+        Agent.sess.run(self.embedding_init, feed_dict={self.embedding_placeholder: embedding})
+
     def _build_input(self):
         """ 
         Build self's starting state using the pre-trained cnn on imagenet 
@@ -12,8 +17,14 @@ class ImageCaptioner(SenderAgent):
         self.in_captions = tf.placeholder(tf.int32, shape=(self.batch_size, self.L))
         self.out_captions = tf.placeholder(tf.int32, shape=(self.batch_size, self.L))
 
+        # Define the variable that will hold the embedding:
+        self.embedding = tf.Variable(tf.zeros((Agent.K, Agent.emb_size)), trainable=False, name="Embedding")
+
+        self.in_embs = tf.nn.embedding_lookup(self.embedding, self.in_captions)
+
         super()._build_input()
-        self.helper = tf.contrib.seq2seq.TrainingHelper(tf.one_hot(self.in_captions, self.K), [self.L]*self.batch_size)
+        self.input = tf.concat((self.in_embs, self.pre_feat), axis=1)
+        self.helper = tf.contrib.seq2seq.TrainingHelper(self.input, [self.L]*self.batch_size) #tf.one_hot(self.in_captions, self.K), [self.L]*self.batch_size)
     
     def _build_losses(self):
         """ 

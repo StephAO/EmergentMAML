@@ -13,12 +13,14 @@ class Agent(object):
     K = None
     D = None
     L = None  # Maximum message length
+    emb_size = 300
 
     # MODEL PARAMETERS
     freeze_cnn = False
     num_hidden = 512
-    batch_size = 64
+    batch_size = 256
     batch_shape = (batch_size, img_h, img_w, 3)
+    pretrained_size = 2048 # Dictated by which pretrained model that datahandler uses
 
     # TRAINING PARAMETERS
     step = tf.train.get_or_create_global_step()
@@ -34,10 +36,6 @@ class Agent(object):
     gpu_options = tf.GPUOptions(allow_growth=True)
     # Create session
     sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
-
-    #  Shared CNN pre-trained on imagenet, see https://github.com/keras-team/keras-applications for other options
-    pre_trained = tf.keras.applications.mobilenet_v2.MobileNetV2(include_top=False, weights='imagenet', pooling='max',
-                                                                 input_shape=(img_h, img_w, 3))
 
     # Create save/load directory
     base_dir = project_path
@@ -72,7 +70,8 @@ class Agent(object):
             "loss_type": Agent.loss_type,
             "batch_size": Agent.batch_size,
             "num_hidden": Agent.num_hidden,
-            "temperature": Agent.temperature
+            "temperature": Agent.temperature,
+            "embedding_size": Agent.emb_size
         }
 
         return params
