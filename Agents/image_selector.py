@@ -11,8 +11,9 @@ class ImageSelector(ReceiverAgent):
     
     def __init__(self, **kwargs):
         # TODO - Not sure what is the difference betwenn message_len and max_len
-        message = tf.placeholder(dtype=tf.float32, shape=(None, Agent.batch_size, Agent.K))
+        message = tf.placeholder(dtype=tf.int32, shape=(Agent.batch_size, Agent.L, Agent.K))
         super().__init__(message, Agent.L, **kwargs)
+
 
     def _build_optimizer(self):
         self.train_op = tf.contrib.layers.optimize_loss(

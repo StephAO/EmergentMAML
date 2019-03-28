@@ -107,7 +107,7 @@ class ReferentialGame:
         """
         # Get target indices
         target_indices = np.random.randint(self.D + 1, size=self.batch_size)
-        target_images = np.zeros(self.sender.batch_shape)
+        target_images = np.zeros((Agent.batch_size, 2048))
 
         target = target_indices
         candidates = []
@@ -125,12 +125,12 @@ class ReferentialGame:
 
         accuracy, loss, prediction = self.run_game(fd, mode=mode)
 
-        if mode == "val":
-            print(self.V.ids_to_tokens(prediction.T[0]))
-            img = images[0][0]
-            plt.axis('off')
-            plt.imshow(img)
-            plt.show()
+        # if mode == "val":
+        #     print(self.V.ids_to_tokens(prediction.T[0]))
+        #     img = images[0][0]
+        #     plt.axis('off')
+        #     plt.imshow(img)
+        #     plt.show()
 
 
         return accuracy, loss

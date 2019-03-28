@@ -19,12 +19,12 @@ class Agent(object):
     # MODEL PARAMETERS
     freeze_cnn = False
     num_hidden = 512
-    batch_size = 1024
+    batch_size = 64
     emb_size = 300
 
     # TRAINING PARAMETERS
     step = tf.train.get_or_create_global_step()
-    lr = 0.001  # self._cyclicLR() #0.005
+    lr = 0.0001  # self._cyclicLR() #0.005
     gradient_clip = 5.0
     temperature = 5.
     loss_type = None

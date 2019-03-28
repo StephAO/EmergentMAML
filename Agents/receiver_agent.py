@@ -48,14 +48,11 @@ class ReceiverAgent(Agent):
             - Inputs the message passed from the sender
         :return: None
         """
-        self.embedding = tf.get_variable(
-            name="map",
-            shape=[Agent.K, Agent.emb_size],
-            initializer=tf.initializers.glorot_normal)
-        self.msg_embeddings = tf.nn.embedding_lookup(self.embedding, self.message)
         # TODO: consider a better starting state for receiver
         self.s0 = ReceiverAgent.rnn_cell.zero_state(Agent.batch_size, dtype=tf.float32)
-
+        self.embedding = tf.get_variable(name="map")
+        self.batch_embedding = tf.tile(tf.expand_dims(self.embedding, axis=0), [Agent.batch_size, 1, 1])
+        self.msg_embeddings = tf.matmul(self.message, self.batch_embedding)
 
     def _build_output(self):
         """
@@ -69,8 +66,8 @@ class ReceiverAgent(Agent):
         Get predicted image by finding image with the highest energy
         :return:
         """
-        self.rnn_outputs, self.final_state = tf.nn.dynamic_rnn(ReceiverAgent.rnn_cell, self.msg_embeddings, initial_state=self.s0, time_major=True)
-                                                               # sequence_length=self.msg_len, time_major=True)
+        self.rnn_outputs, self.final_state = tf.nn.dynamic_rnn(ReceiverAgent.rnn_cell, self.msg_embeddings, initial_state=self.s0)
+                                                               # sequence_length=self.msg_len) #, time_major=True)
         # Get RNN features
         # TODO consider using final rnn_output instead of final_state (not sure which is better)
         # self.rnn_features = tf.keras.layers.Dense(self.num_hidden, activation=tf.nn.leaky_relu,

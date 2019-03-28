@@ -65,7 +65,7 @@ class SenderAgent(Agent):
             self.pre_feat = tf.one_hot(self.target_image, Agent.D+1)
 
 
-        self.pre_feat = self.img_fc(self.target_image)
+        self.pre_feat = self.img_fc(self.pre_feat)
         self.L_pre_feat = tf.keras.layers.RepeatVector(self.L)(self.pre_feat)
         self.s0 = tf.nn.rnn_cell.LSTMStateTuple(self.pre_feat, self.pre_feat)
 
@@ -139,6 +139,9 @@ class SenderAgent(Agent):
         if self.straight_through:
             self.message_hard = tf.cast(tf.one_hot(tf.argmax(self.message, -1), self.K), self.message.dtype)
             self.message = tf.stop_gradient(self.message_hard - self.message) + self.message
+            # self.message =
+            # print(self.message.shape)
+            # print(self.embedding.shape)
 
         self.prediction = tf.argmax(tf.nn.softmax(self.rnn_outputs), axis=2, output_type=tf.int32)
 
