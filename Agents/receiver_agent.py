@@ -165,7 +165,7 @@ class ReceiverAgent(Agent):
                 clip_gradients=Agent.gradient_clip,
                 # only update receiver agent weights
                 variables=v)
-            for v in [SenderAgent.get_all_weights(), ReceiverAgent.get_all_weights()]
+            for v in [SenderAgent.get_all_weights() + [self.embedding], ReceiverAgent.get_all_weights() + [self.embedding]]
         ]
 
     def get_train_ops(self):
