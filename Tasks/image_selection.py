@@ -4,88 +4,21 @@ import matplotlib.pyplot as plt
 import numpy as np
 from comet_ml import Experiment
 
-from Agents.agent import Agent
-from Agents.image_selector import ImageSelector
+from Agents import Agent
+from Tasks import Task
 
-from utils import data_handler as dh
-from utils.vocabulary import Vocabulary as V
-
-class ImageSelection:
+class ImageSelection(Task):
     """
     class for running the image selector
     """
-    
-    def __init__(self, image_selector, data_handler=None, track_results=True, experiment=None):
-        """
-        Initialize the image selection task
-        """
-        self.L = Agent.L
-        self.K = Agent.K
-        self.D = Agent.D
-        self.batch_size = Agent.batch_size
-
-        self.image_selector = image_selector
-        self.dh = data_handler
-
-        # Get necessary ops to run
-        self.run_ops = list(self.image_selector.get_output()) + [Agent.step]
-        self.train_ops = self.image_selector.get_train_ops()
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.name = "Image Selection"
+        self.captions_required = True
         
-        self.V = V()
-        try:
-            self.V.load_vocab()
-        except FileNotFoundError:
-            self.V.generate_vocab()
-            self.V.save_vocab()
-            
-        self.V.generate_top_k(self.K)
+    def train_batch(self, inputs, mode="train"):
+        images, captions = inputs
 
-        # Setup comet experiment
-        self.track_results = track_results
-        self.train_metrics = {}
-        self.val_metrics = {}
-        self.experiment = experiment or Experiment(api_key='1jl4lQOnJsVdZR6oekS6WO5FI',
-                                                   project_name='Image Selection',
-                                                   auto_param_logging=False, auto_metric_logging=False,
-                                                   disabled=(not track_results))
-        if experiment is None:
-            self.params = {}
-            self.params.update(Agent.get_params())
-            self.params.update(self.dh.get_params())
-            self.experiment.log_parameters(self.params)
-
-
-    def get_experiment_key(self):
-        return self.experiment.get_key()
-        
-    def train_epoch(self, e, mode="train"):
-        """
-        :return:
-        """
-        losses = []
-        accuracies = []
-
-        image_gen = self.dh.get_images(return_captions=True, mode=mode)
-        while True:
-            try:
-                images, captions = next(image_gen)
-                acc, loss = self.train_batch(images, captions, mode=mode)
-                losses.append(loss)
-                accuracies.append(acc)
-            except StopIteration:
-                break
-
-        avg_acc, avg_loss  = np.mean(accuracies), np.mean(losses)
-        if mode == "val":
-            self.experiment.set_step(e)
-            self.val_metrics["Validation Accuracy"] = avg_acc
-            self.val_metrics["Validation Loss"] = avg_loss
-            self.experiment.log_metrics(self.val_metrics)
-
-        return avg_acc, avg_loss
-        
-    def train_batch(self, images, captions, mode="train"):
-        
         target_indices = np.random.randint(self.D + 1, size=self.batch_size)
         target_captions = np.zeros((self.batch_size, self.L, self.K))
         
@@ -102,34 +35,19 @@ class ImageSelection:
             target_captions[i] = target_captions_one_hot
         
         fd = {}
-        self.image_selector.fill_feed_dict(fd, target_captions, candidates, target_indices)
+        self.agents[0].fill_feed_dict(fd, target_captions, candidates, target_indices)
         
-        accuracy, loss = self.run_game(fd, mode=mode)
-
-        if mode == "val":
-            fig = plt.figure(figsize=(10, 10))
-            columns = 8
-            rows = 4
-            print(self.V.ids_to_tokens(chosen_caption))
-            print(target_indices[-1])
-            print(accuracy)
-            for i, img in enumerate(images):
-                fig.add_subplot(rows, columns, i+1)
-                plt.imshow(img[-1])
-            plt.show()
+        accuracy, loss, prediction = self.run_game(fd, mode=mode)
 
         return accuracy, loss
-        
-    def run_game(self, fd, mode="train"):
-        ops = self.run_ops
-        if mode == "train":
-            ops += self.train_ops
-        acc, loss, step = Agent.sess.run(ops, feed_dict=fd)[:3]
 
-        if mode == "train" and self.track_results:
-            self.experiment.set_step(step)
-            self.train_metrics["Image Selection Training Accuracy"] = acc
-            self.train_metrics["Image Selection Training Loss"] = loss
-            self.experiment.log_metrics(self.train_metrics)
-
-        return acc, loss
+    def visual_analysis(self, index, caption, images):
+        fig = plt.figure(figsize=(10, 10))
+        columns = 8
+        rows = 4
+        print(self.V.ids_to_tokens(caption))
+        print(index)
+        for i, img in enumerate(images):
+            fig.add_subplot(rows, columns, i+1)
+            plt.imshow(img[-1])
+        plt.show()

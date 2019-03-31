@@ -36,33 +36,28 @@ def main(epochs=10000, task="reptile", D=31, K=10000, L=10, use_images=True, los
     Run epochs of games
     :return:
     """
-    load_key=None#"23c353ddf0e545ccbd86ad7babeaf09e"
+    load_key=None
+    track_results=True
 
     Agent.set_params(K=K, D=D, L=L, loss_type=loss_type)
     dh = Data_Handler(batch_size=Agent.batch_size, group=False)
 
     with tf.variable_scope("all", reuse=tf.AUTO_REUSE):
-
-        s, r = False, False
-
+        # Set up Agents and Tasks
         if task.lower() in ["rg", "referential game", "referential_game", "referentialgame"]:
             s = SenderAgent(load_key=load_key)
             r = ReceiverAgent(*s.get_output(), load_key=load_key)
-            t = ReferentialGame(s, r, dh)
+            t = ReferentialGame(s, r, data_handler=dh, track_results=track_results)
             dh.set_params(images_per_instance=D + 1)
-            s, r = True, True
         elif task.lower() in ["ic", "image captioning", "image_captioning", "imagecaptioning"]:
             ic = ImageCaptioner(load_key=load_key)
-            t = ImageCaptioning(ic, dh)
-            s = True
+            t = ImageCaptioning(ic, data_handler=dh, track_results=track_results)
         elif task.lower() in ["is", "image selection", "image_selection", "imageselection"]:
             is_ = ImageSelector(load_key=load_key)
-            t = ImageSelection(is_, dh)
+            t = ImageSelection(is_, data_handler=dh, track_results=track_results)
             dh.set_params(images_per_instance=D + 1)
-            r = True
         elif task.lower() in ["r", "reptile"]:
-            t = Reptile(dh)
-            s, r = True, True
+            t = Reptile(data_handler=dh, track_results=track_results)
         else:
             raise ValueError("Unknown task {}, select from ['referential_game', 'image_captioning']".format(task))
 
@@ -70,23 +65,21 @@ def main(epochs=10000, task="reptile", D=31, K=10000, L=10, use_images=True, los
         variables_to_initialize = tf.global_variables()
         if load_key is not None:
             dont_initialize = []
-            if s:
+            if SenderAgent.loaded:
                 dont_initialize += SenderAgent.get_all_weights()
-            if r:
+            if ReceiverAgent.loaded:
                 dont_initialize += ReceiverAgent.get_all_weights()
             variables_to_initialize = [v for v in tf.global_variables() if v not in dont_initialize]
-
         Agent.sess.run(tf.variables_initializer(variables_to_initialize))
 
-        print(len(tf.trainable_variables()))
 
         exp_key = t.get_experiment_key()
         losses = []
 
         # Starting point
-        # print("Validating epoch 0:")
-        # accuracy, loss = t.train_epoch(0, mode="val")
-        # print("\rloss: {0:1.4f}, accuracy: {1:5.2f}%".format(loss, accuracy * 100), end="\n")
+        print("Validating epoch 0:")
+        accuracy, loss = t.train_epoch(0, mode="val")
+        print("\rloss: {0:1.4f}, accuracy: {1:5.2f}%".format(loss, accuracy * 100), end="\n")
 
         # Start training
         for e in range(1, epochs + 1):
@@ -102,7 +95,7 @@ def main(epochs=10000, task="reptile", D=31, K=10000, L=10, use_images=True, los
             if accuracy == 1.0 or converged(losses):
                 break
 
-            save_models(exp_key, sender=s, receiver=r)
+            save_models(exp_key)
 
         Agent.sess.close()
 

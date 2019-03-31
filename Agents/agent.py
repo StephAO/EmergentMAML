@@ -1,10 +1,15 @@
 import tensorflow as tf
 import os
 import sys
-from utils.data_handler import img_w, img_h, project_path
+from utils.data_handler import project_path
 from utils.vocabulary import Vocabulary as V
 
 def get_list_of_variables(lst):
+    """
+    helper function to get a list of weights given a list of keras layers and tf variables
+    :param lst: list of keras layers and tf variables
+    :return: list of tf variables
+    """
     weights = []
     for l in lst:
         if isinstance(l, tf.Variable):
@@ -16,12 +21,12 @@ def get_list_of_variables(lst):
 
 class Agent(object):
     """
-    Abstract base class for all agents - eventually the weights contained here will be the weights trained using MAML
+    Abstract base class for all agents
     WARNING: must set parameters before creating any agents
     """
     # GAME PARAMETERS
-    K = None
-    D = None
+    K = None  # Vocabulary size
+    D = None  # Number of distractors
     L = None  # Maximum message length
 
     # MODEL PARAMETERS
@@ -34,6 +39,7 @@ class Agent(object):
     step = tf.train.get_or_create_global_step()
     lr = 0.0005  # self._cyclicLR() #0.005
     gradient_clip = 5.0
+    # TODO define temperature better - maybe learnt temperature?
     temperature = 5.
     loss_type = None
 
@@ -44,10 +50,6 @@ class Agent(object):
     gpu_options = tf.GPUOptions(allow_growth=True)
     # Create session
     sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
-
-    #  Shared CNN pre-trained on imagenet, see https://github.com/keras-team/keras-applications for other options
-    # pre_trained = tf.keras.applications.inception_v3.InceptionV3(include_top=False, weights='imagenet', pooling='max',
-    #                                                              input_shape=(img_h, img_w, 3))
 
     # Create save/load directory
     base_dir = project_path
@@ -92,27 +94,23 @@ class Agent(object):
 
     @classmethod
     def get_weights(cls):
-        """
-        returns a list of all weights unique to agent
-        """
+        """ Returns a list of all weights unique to agent"""
         return get_list_of_variables(cls.layers)
 
     @classmethod
     def get_shared_weights(cls):
-        """
-        returns a list of all weights shared by all agents
-        """
+        """ Returns a list of all weights shared by all agents"""
         return get_list_of_variables(cls.shared_layers)
 
     @classmethod
     def get_all_weights(cls):
-        """
-        returns a list of all agent weights
-        """
+        """ Returns a list of all agent weights"""
         return get_list_of_variables(cls.layers + cls.shared_layers)
 
     @classmethod
     def save_model(cls, exp_name):
+        if cls.saver is None:
+            return
         save_dir = Agent.data_dir + "/" + exp_name
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
@@ -125,20 +123,12 @@ class Agent(object):
             checkpoint_path = '/'.join([Agent.data_dir, exp_name, cls.__name__, "checkpoint.ckpt"])
             cls.saver.restore(Agent.sess, checkpoint_path)
             print("Loaded weights for {}".format(cls.__name__))
+            cls.loaded = True
         except tf.errors.NotFoundError:
             raise FileNotFoundError("No saved models found for experiment {}".format(exp_name))
 
-    # Create saver
-    saver = None
-
-    def __init__(self, load_key=None, use_images=True):
-        """
-        Base agent, also currently holds a lot of hyper parameters
-        :param vocab_size:
-        :param num_distractors:
-        :param use_images:
-        :param loss_type:
-        """
+    def __init__(self):
+        """Base agent, also currently holds a lot of hyper parameters"""
         if not (Agent.K and Agent.L and Agent.D):
             raise ValueError("Set static agent parameters using Agent.set_params() before creating any agent instances")
 
@@ -153,15 +143,11 @@ class Agent(object):
 
             Agent.V.generate_top_k(Agent.K)
 
-        # TODO deal with hyper parameters better
-        self.use_images = use_images
-
         # All agents need a train_op
         self.train_op = None
 
         # Build model
         self._build_input()
-        self._build_RNN()
         self._build_output()
         self._build_losses()
         self._build_optimizer()
@@ -169,7 +155,8 @@ class Agent(object):
     def _cyclicLR(self):
         """
         Cyclical triangular learning rate Based on https://github.com/bckenstler/CLR
-        :return:
+        Currently unused
+        :return: cyclic learning rate
         """
         step_size = 100
         base_lr = 0.0001
@@ -183,32 +170,32 @@ class Agent(object):
         """
         Abstract Method
         Build starting state and inputs to next state
-        :return: None
         """
-        pass
-
-    def _build_RNN(self):
-        """
-        Build main RNN of agent
-        :return: None
-        """
-        # TODO Use tf.contrib.cudnn_rnn.CudnnGRU for better GPU performance
-        # TODO test GRU vs LSTM
-        # self.gru_cell = tf.nn.rnn_cell.GRUCell(self.num_hidden, kernel_initializer=tf.random_normal_initializer)
         pass
 
     def _build_output(self):
         """
         Abstract Method
         Build output of agent from the output of the RNN
-        :return: None
         """
         pass
 
     def _build_losses(self):
+        """
+        Abstract Method
+        Build losses for agent
+        """
         pass
 
     def _build_optimizer(self):
+        """
+        Abstract Method
+        Build optimizer and train_op of agent
+        """
         pass
 
+    def close(self):
+        Agent.sess.close()
 
+    def __del__(self):
+        Agent.sess.close()

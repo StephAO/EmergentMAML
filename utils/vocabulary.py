@@ -60,7 +60,6 @@ class Vocabulary:
 
         print("Created vocabulary with {} different tokens".format(len(self.vocabulary_counter)))
 
-
     def save_vocab(self):
         with open(self.data_dir + 'vocabulary_counter.p', 'wb+') as vc:
             pickle.dump(self.vocabulary_counter, vc)
@@ -125,12 +124,6 @@ class Vocabulary:
             idx += 1
 
         return ids
-
-    def get_weights(self, L, tokens):
-        weights = np.zeros(L)
-        weights[:len(tokens)] = 1
-        # weights[0] = 0.1
-        return weights
     
     def ids_to_tokens(self, ids):
         """

@@ -1,14 +1,13 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import os
 from pycocotools.coco import COCO
-from skimage import io, transform
 import pickle
+import tensorflow as tf
 
 # TODO: consider moving this to a better spot
-img_h = 128
-img_w = 128
-coco_path = '/h/stephaneao/cocoapi'
-project_path = '/h/stephaneao/PycharmProjects/EmergentMAML'
+coco_path = '/home/stephane/cocoapi'
+project_path = '/home/stephane/PycharmProjects/EmergentMAML'
 
 class Data_Handler:
 
@@ -16,10 +15,11 @@ class Data_Handler:
         self.images_per_instance = images_per_instance
         self.batch_size = batch_size
         self.images_per_batch = self.images_per_instance * self.batch_size
-        self.data_dir = coco_path
-        self.dataType = 'train2014'
-        self.data_file = '{}/annotations/instances_{}.json'.format(self.data_dir, self.dataType)
-        self.caption_file = '{}/annotations/captions_{}.json'.format(self.data_dir, self.dataType)
+        self.coco_path = coco_path
+        self.feat_dir = 'train_feats'
+        self.data_dir = 'train2014'
+        self.data_file = '{}/annotations/instances_{}.json'.format(self.coco_path, self.data_dir)
+        self.caption_file = '{}/annotations/captions_{}.json'.format(self.coco_path, self.data_dir)
         # initialize COCO api for image and instance annotations
         self.coco = COCO(self.data_file)
         # Uncomment to enable captions
@@ -137,18 +137,6 @@ class Data_Handler:
                     else:
                         img_id = data[data_idx]
                         data_idx += 1
-                    # img = self.coco.loadImgs(img_id)[0]
-                    # img = io.imread('{}/images/{}/{}'.format(self.data_dir, self.dataType, img['file_name']))
-                    #
-                    # # Increase channels (by copying) of bw images that don't have 3 channels
-                    # while img.shape[-1] != 3:
-                    #     img = np.repeat(img[:, :, np.newaxis], 3, axis=2)
-                    #
-                    # img = transform.resize(img, (img_h, img_w), anti_aliasing=True, mode='reflect')
-                    # with open('{}/images/{}/{}'.format(self.data_dir, 'train_feats', img['file_name']), "rb") as f:
-                    #     img = pickle.load(f)
-
-
 
                     if return_captions:
                         img_captions = []
@@ -158,13 +146,8 @@ class Data_Handler:
                             img_captions.append(a['caption'])
                         captions.append(img_captions)
 
-                    # print(img_captions)
-                    # plt.axis('off')
-                    # plt.imshow(img)
-                    # plt.show()
-
                     img = self.coco.loadImgs(img_id)[0]
-                    with open('{}/images/{}/{}'.format(self.data_dir, 'train_feats', img['file_name']), "rb") as f:
+                    with open('{}/images/{}/{}'.format(self.coco_path, self.feat_dir, img['file_name']), "rb") as f:
                         img = pickle.load(f)
 
                     img_batches[i, b] = img
@@ -178,3 +161,61 @@ class Data_Handler:
             yield ret
 
         self.print_progress(generated, total)
+
+    def generate_all_encodings(self):
+
+        #  Shared CNN pre-trained on imagenet, see https://github.com/keras-team/keras-applications for other options
+        pre_trained = tf.keras.applications.inception_v3.InceptionV3(include_top=False, weights='imagenet',
+                                                                     pooling='max',
+                                                                     input_shape=(299, 299, 3))
+
+        # Create save/load directory
+        dir = '{}/images/{}'.format(self.coco_path, self.feat_dir)
+        if not os.path.exists(dir):
+            os.makedirs(dir)
+
+        img_ph = tf.placeholder(tf.float32)
+        img_feats = pre_trained(img_ph)
+        sess = tf.Session()
+
+        sess.run(tf.variables_initializer(tf.global_variables()))
+
+        count = 0
+
+        img_list = list(self.coco.getImgIds())
+
+        for img_id in img_list:
+            img = self.coco.loadImgs(img_id)[0]
+            img_fn = img['file_name']
+            img_path = '{}/images/{}/{}'.format(self.coco_path, self.data_dir, img_fn)
+            img = tf.keras.preprocessing.image.load_img(img_path, color_mode='rgb', target_size=(299, 299))
+
+            img = tf.keras.preprocessing.image.img_to_array(img)
+
+            img = np.expand_dims(img, axis=0)
+
+            # Increase channels (by copying) of bw images that don't have 3 channels
+            while img.shape[-1] != 3:
+                assert False
+
+            # set image data between -1 and 1
+            img /= 255.
+            img -= 0.5
+            img *= 2.
+
+            img_feat = sess.run([img_feats], feed_dict={img_ph: img})
+
+            img_feat = np.squeeze(img_feat)
+
+            with open('{}/images/{}/{}'.format(self.coco_path, self.feat_dir, img_fn), "wb") as f:
+                pickle.dump(img_feat, f)
+
+            count += 1
+
+
+        self.print_progress(count, len(img_list))
+
+if __name__ == "__main__":
+    dh = Data_Handler()
+    dh.generate_all_encodings()
+

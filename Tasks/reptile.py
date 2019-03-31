@@ -5,7 +5,7 @@ from comet_ml import Experiment
 from Tasks import image_captioning as ic, referential_game as rg
 from utils.variables import *
 from Agents import Agent, SenderAgent, ReceiverAgent, ImageCaptioner, ImageSelector
-from Tasks import ReferentialGame, ImageCaptioning, ImageSelection
+from Tasks import Task, ReferentialGame, ImageCaptioning, ImageSelection
 from utils.data_handler import Data_Handler
 import tensorflow as tf
 
@@ -19,13 +19,9 @@ Steps:
 """
 
 
-class Reptile:
+class Reptile(Task):
     """
-    A meta-learning session.
-    Reptile can operate in two evaluation modes: normal
-    and transductive. In transductive mode, information is
-    allowed to leak between test samples via BatchNorm.
-    Typically, MAML is used in a transductive manner.
+    A meta-learning task that teaches an agent over a set of other tasks
     """
     def __init__(self, data_handler, sender=True, receiver=True, image_captioner=True, image_selector=True, track_results=True):
         self.sess = Agent.sess
@@ -48,16 +44,16 @@ class Reptile:
         self.T = {}
         if image_captioner:
             self.ic = ImageCaptioning(self.IC, experiment=self.experiment, track_results=False)
-            self.T["Image Captioner"] = lambda img, capts: self.ic.train_batch(images=img, captions=capts, mode="train")
+            self.T["Image Captioner"] = lambda img, capts: self.ic.train_batch((img,capts), mode="train")
         if image_selector:
             self.is_ = ImageSelection(self.IS, experiment=self.experiment, track_results=False)
-            self.T["Image Selector"] = lambda img, capts: self.is_.train_batch(images=img, captions=capts, mode="train")
+            self.T["Image Selector"] = lambda img, capts: self.is_.train_batch((img,capts), mode="train")
         if sender or receiver:
             self.rg = ReferentialGame(self.S, self.R, experiment=self.experiment, track_results=False)
             if receiver:
-                self.T["Receiver"] = lambda img, capts: self.rg.train_batch(images=img, mode="receiver_train")
+                self.T["Receiver"] = lambda img, capts: self.rg.train_batch(img, mode="receiver_train")
             if sender:
-                self.T["Sender"] = lambda img, capts: self.rg.train_batch(images=img, mode="sender_train")
+                self.T["Sender"] = lambda img, capts: self.rg.train_batch(img, mode="sender_train")
 
 
         self.sender_shared_state = VariableState(self.sess, SenderAgent.get_shared_weights())
@@ -79,9 +75,6 @@ class Reptile:
         self.set_weights(new_shared_weights=shared_average)
 
         self.dh = data_handler
-
-    def get_experiment_key(self):
-        return self.experiment.get_key()
 
     def get_diff(self, a, b):
         diff = 0.
@@ -162,6 +155,3 @@ class Reptile:
 
         return 0, weight_diff
 
-if __name__ == "__main__":
-    a = SenderAgent(5, 10, 15)
-    r = Reptile(a, None)
