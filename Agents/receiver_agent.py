@@ -12,27 +12,31 @@ def cosine_similarity(a, b, axis=1):
 
 
 class ReceiverAgent(Agent):
+    # Shared RNN cell
+    rnn_cell = tf.nn.rnn_cell.LSTMCell(Agent.num_hidden, initializer=tf.glorot_uniform_initializer)
     # Used to map RNN output to RNN features
     fc = tf.keras.layers.Dense(Agent.num_hidden, activation=tf.nn.tanh,
                                kernel_initializer=tf.glorot_uniform_initializer)
-    layers = [fc]
+    layers = [fc, rnn_cell]
 
+    # Shared embedding
+    embedding = None
     # Shared image fc layer
     img_fc = tf.keras.layers.Dense(Agent.num_hidden, activation=tf.nn.tanh,
                                    kernel_initializer=tf.glorot_uniform_initializer)
-    # img_fc = tf.make_template("img_fc", img_fc)
-    # img_fc.name = "shared_fc"
-    # Shared RNN cell
-    rnn_cell = tf.nn.rnn_cell.LSTMCell(Agent.num_hidden, initializer=tf.glorot_uniform_initializer)
 
     # list to store MAML layers
-    shared_layers = [img_fc, rnn_cell]
+    shared_layers = [img_fc]
 
     saver = None
 
     def __init__(self, message, msg_len, load_key=None, *args, **kwargs):
-        # with tf.variable_scope("receiver"):
-        self.message = message
+
+        ReceiverAgent.embedding = tf.get_variable(name="map", shape=[Agent.K, Agent.emb_size],
+                                                  initializer=tf.initializers.glorot_normal)
+        ReceiverAgent.shared_layers += [ReceiverAgent.embedding]
+
+        self.message = tf.cast(message, tf.float32)
         self.msg_len = msg_len
         super().__init__(*args, **kwargs)
         # Create saver
@@ -50,8 +54,7 @@ class ReceiverAgent(Agent):
         """
         # TODO: consider a better starting state for receiver
         self.s0 = ReceiverAgent.rnn_cell.zero_state(Agent.batch_size, dtype=tf.float32)
-        self.embedding = tf.get_variable(name="map")
-        self.batch_embedding = tf.tile(tf.expand_dims(self.embedding, axis=0), [Agent.batch_size, 1, 1])
+        self.batch_embedding = tf.tile(tf.expand_dims(ReceiverAgent.embedding, axis=0), [Agent.batch_size, 1, 1])
         self.msg_embeddings = tf.matmul(self.message, self.batch_embedding)
 
     def _build_output(self):
@@ -165,7 +168,7 @@ class ReceiverAgent(Agent):
                 clip_gradients=Agent.gradient_clip,
                 # only update receiver agent weights
                 variables=v)
-            for v in [SenderAgent.get_all_weights() + [self.embedding], ReceiverAgent.get_all_weights() + [self.embedding]]
+            for v in [SenderAgent.get_all_weights(), ReceiverAgent.get_all_weights()]
         ]
 
     def get_train_ops(self):

@@ -48,10 +48,11 @@ class ImageSelection:
                                                    project_name='Image Selection',
                                                    auto_param_logging=False, auto_metric_logging=False,
                                                    disabled=(not track_results))
-        self.params = {}
-        self.params.update(Agent.get_params())
-        self.params.update(self.dh.get_params())
-        self.experiment.log_parameters(self.params)
+        if experiment is None:
+            self.params = {}
+            self.params.update(Agent.get_params())
+            self.params.update(self.dh.get_params())
+            self.experiment.log_parameters(self.params)
 
 
     def get_experiment_key(self):
@@ -86,19 +87,19 @@ class ImageSelection:
     def train_batch(self, images, captions, mode="train"):
         
         target_indices = np.random.randint(self.D + 1, size=self.batch_size)
-        target_captions = np.zeros((self.batch_size, self.L))
+        target_captions = np.zeros((self.batch_size, self.L, self.K))
         
         candidates = images
         
         for i, ti in enumerate(target_indices):
             chosen_caption = captions[i][ti][np.random.randint(5)]
-            print(chosen_caption)
+            # print(chosen_caption)
             tokens = chosen_caption.translate(str.maketrans('', '', string.punctuation))
             tokens = tokens.lower().split()
             target_caption_ids = self.V.tokens_to_ids(self.L, tokens)
             target_captions_one_hot = np.zeros((self.L, self.K))
             target_captions_one_hot[np.arange(self.L),target_caption_ids] = 1
-            target_captions[:,i] = target_captions_one_hot
+            target_captions[i] = target_captions_one_hot
         
         fd = {}
         self.image_selector.fill_feed_dict(fd, target_captions, candidates, target_indices)

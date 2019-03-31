@@ -4,6 +4,14 @@ import sys
 from utils.data_handler import img_w, img_h, project_path
 from utils.vocabulary import Vocabulary as V
 
+def get_list_of_variables(lst):
+    weights = []
+    for l in lst:
+        if isinstance(l, tf.Variable):
+            weights.append(l)
+        else:
+            weights.extend(l.weights)
+    return weights
 
 
 class Agent(object):
@@ -24,7 +32,7 @@ class Agent(object):
 
     # TRAINING PARAMETERS
     step = tf.train.get_or_create_global_step()
-    lr = 0.0001  # self._cyclicLR() #0.005
+    lr = 0.0005  # self._cyclicLR() #0.005
     gradient_clip = 5.0
     temperature = 5.
     loss_type = None
@@ -85,31 +93,23 @@ class Agent(object):
     @classmethod
     def get_weights(cls):
         """
-        returns a list of all weights shared by all agents
-        :return:
+        returns a list of all weights unique to agent
         """
-        weights = []
-        for l in cls.layers:
-            weights.extend(l.weights)
-        return weights
+        return get_list_of_variables(cls.layers)
 
     @classmethod
     def get_shared_weights(cls):
         """
         returns a list of all weights shared by all agents
-        :return:
         """
-        weights = []
-        for l in cls.shared_layers:
-            weights.extend(l.weights)
-        return weights
+        return get_list_of_variables(cls.shared_layers)
 
     @classmethod
     def get_all_weights(cls):
-        weights = []
-        for l in cls.layers + cls.shared_layers:
-            weights.extend(l.weights)
-        return weights
+        """
+        returns a list of all agent weights
+        """
+        return get_list_of_variables(cls.layers + cls.shared_layers)
 
     @classmethod
     def save_model(cls, exp_name):

@@ -6,19 +6,19 @@ from utils.data_handler import img_h, img_w
 
 
 class SenderAgent(Agent):
+    # RNN cell
+    rnn_cell = tf.nn.rnn_cell.LSTMCell(Agent.num_hidden, initializer=tf.glorot_uniform_initializer)
     # Used to map RNN output to RNN input
     output_to_input = None
-    layers = None
+    layers = [rnn_cell]
+
+    # Shared embedding
+    embedding = None
     # Shared image fc layer
     img_fc = tf.keras.layers.Dense(Agent.num_hidden,
                                    kernel_initializer=tf.glorot_uniform_initializer)
-    # img_fc = tf.make_template("img_fc", img_fc)
-    # img_fc.name = "shared_fc"
-    # Shared RNN cell
-    rnn_cell = tf.nn.rnn_cell.LSTMCell(Agent.num_hidden, initializer=tf.glorot_uniform_initializer)
-
     # list to store MAML layers
-    shared_layers = [img_fc, rnn_cell]
+    shared_layers = [img_fc]
 
     saver = None
 
@@ -29,7 +29,10 @@ class SenderAgent(Agent):
         self.straight_through=straight_through
         SenderAgent.output_to_input = SenderAgent.output_to_input or \
                                       tf.layers.Dense(Agent.K, kernel_initializer=tf.glorot_uniform_initializer)
-        SenderAgent.layers = [SenderAgent.output_to_input]
+        SenderAgent.layers += [SenderAgent.output_to_input]
+        SenderAgent.embedding = tf.get_variable(name="map", shape=[Agent.K, Agent.emb_size],
+                                                initializer=tf.initializers.glorot_normal)
+        SenderAgent.shared_layers += [SenderAgent.embedding]
 
         super().__init__(load_key=load_key, **kwargs)
         # Create saver
@@ -46,12 +49,6 @@ class SenderAgent(Agent):
             - First input is a start of sentence token (sos), followed by the output of the previous timestep
         :return:
         """
-        self.embedding = tf.get_variable(
-            name="map",
-            shape=[Agent.K, Agent.emb_size],
-            initializer=tf.initializers.glorot_normal)
-
-
         if self.use_images:
             # Determine starting state
             self.target_image = tf.placeholder(tf.float32, shape=(Agent.batch_size, 2048))
@@ -70,22 +67,31 @@ class SenderAgent(Agent):
         self.s0 = tf.nn.rnn_cell.LSTMStateTuple(self.pre_feat, self.pre_feat)
 
         self.starting_tokens = tf.stack([Agent.V.sos_id] * Agent.batch_size)
+        self.starting_embed = tf.nn.embedding_lookup(SenderAgent.embedding, self.starting_tokens)
+        self.starting_combined = tf.concat((self.starting_embed, self.pre_feat), axis=1)
         # Determines input to decoder at next time step
         # TODO: define a end_fn that actually has a chance of triggering so that we can variable len messages
         # TODO do this better
-        # self.sample_fn = lambda outputs: outputs #tf.one_hot(tf.squeeze(tf.random.multinomial(tf.log(tf.nn.softmax(outputs)), 1)), Agent.K, axis=1)
+        # Copying greedy helper, taken from https://github.com/tensorflow/tensorflow/blob/r1.13/tensorflow/contrib/seq2seq/python/ops/helper.py
+        self.sample_fn = lambda outputs: tf.argmax(outputs, axis=-1, output_type=tf.int32)
+
         # self.next_inputs_fn = lambda outputs: tf.one_hot(tf.squeeze(tf.random.multinomial(tf.log(tf.nn.softmax(outputs)), 1)), Agent.K, axis=1)
-        # self.helper = tf.contrib.seq2seq.InferenceHelper(sample_fn=self.sample_fn,
-        #                                                  sample_shape=[Agent.K],
-        #                                                  sample_dtype=tf.float32,
-        #                                                  start_inputs=self.starting_tokens,
-        #                                                  end_fn=lambda sample_ids:
-        #                                                     tf.reduce_all(tf.equal(sample_ids, self.eos_token)),
-        #                                                  next_inputs_fn = self.next_inputs_fn
-        #                                                  )
+
+        def next_inputs_fn(sample_ids):
+            embed = tf.nn.embedding_lookup(SenderAgent.embedding, sample_ids)
+            combined = tf.concat((embed, self.pre_feat), axis=1)
+            return combined
+
+        self.helper = tf.contrib.seq2seq.InferenceHelper(sample_fn=self.sample_fn,
+                                                         sample_shape=[],
+                                                         sample_dtype=tf.int32,
+                                                         start_inputs=self.starting_combined,
+                                                         end_fn=lambda sample_ids: tf.equal(sample_ids, Agent.V.eos_id),
+                                                         next_inputs_fn = next_inputs_fn
+                                                         )
 
 
-        self.helper = tf.contrib.seq2seq.GreedyEmbeddingHelper(self.embedding, self.starting_tokens, Agent.V.eos_id)
+        # self.helper = tf.contrib.seq2seq.GreedyEmbeddingHelper(SenderAgent.embedding, self.starting_tokens, Agent.V.eos_id)
 
         # TODO add attention?
         # self.attention = tf.contrib.seq2seq.BahdanauAttention(Agent.num_hidden, self.pre_feat, self.L)
@@ -141,7 +147,7 @@ class SenderAgent(Agent):
             self.message = tf.stop_gradient(self.message_hard - self.message) + self.message
             # self.message =
             # print(self.message.shape)
-            # print(self.embedding.shape)
+            # print(SenderAgent.embedding.shape)
 
         self.prediction = tf.argmax(tf.nn.softmax(self.rnn_outputs), axis=2, output_type=tf.int32)
 

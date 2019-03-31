@@ -31,7 +31,7 @@ def save_models(exp_key, sender=True, receiver=True):
     if receiver:
         ReceiverAgent.save_model(exp_key)
 
-def main(epochs=10000, task="rg", D=31, K=10000, L=10, use_images=True, loss_type='pairwise'):
+def main(epochs=10000, task="reptile", D=31, K=10000, L=10, use_images=True, loss_type='pairwise'):
     """
     Run epochs of games
     :return:
@@ -39,7 +39,7 @@ def main(epochs=10000, task="rg", D=31, K=10000, L=10, use_images=True, loss_typ
     load_key=None#"23c353ddf0e545ccbd86ad7babeaf09e"
 
     Agent.set_params(K=K, D=D, L=L, loss_type=loss_type)
-    dh = Data_Handler(batch_size=Agent.batch_size, group=True)
+    dh = Data_Handler(batch_size=Agent.batch_size, group=False)
 
     with tf.variable_scope("all", reuse=tf.AUTO_REUSE):
 
@@ -62,7 +62,7 @@ def main(epochs=10000, task="rg", D=31, K=10000, L=10, use_images=True, loss_typ
             r = True
         elif task.lower() in ["r", "reptile"]:
             t = Reptile(dh)
-            s, r = True
+            s, r = True, True
         else:
             raise ValueError("Unknown task {}, select from ['referential_game', 'image_captioning']".format(task))
 

@@ -58,10 +58,11 @@ class ReferentialGame:
                                                    project_name='Referential Game',
                                                    auto_param_logging=False, auto_metric_logging=False,
                                                    disabled=(not track_results))
-        self.params = {}
-        self.params.update(Agent.get_params())
-        self.params.update(self.dh.get_params())
-        self.experiment.log_parameters(self.params)
+        if experiment is None:
+            self.params = {}
+            self.params.update(Agent.get_params())
+            self.params.update(self.dh.get_params())
+            self.experiment.log_parameters(self.params)
 
     def get_experiment_key(self):
         return self.experiment.get_key()

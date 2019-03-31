@@ -24,7 +24,7 @@ class ImageSelector(ReceiverAgent):
             # some gradient clipping stabilizes training in the beginning.
             clip_gradients=self.gradient_clip,
             # only update image selector weights
-            variables=ImageSelector.get_all_weights() + [self.embedding]
+            variables=ImageSelector.get_all_weights()
         )
 
     def get_train_ops(self):

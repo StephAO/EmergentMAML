@@ -8,7 +8,7 @@ import pickle
 img_h = 128
 img_w = 128
 coco_path = '/h/stephaneao/cocoapi'
-project_path = '/h/stephaneao/EmergentMAML'
+project_path = '/h/stephaneao/PycharmProjects/EmergentMAML'
 
 class Data_Handler:
 
