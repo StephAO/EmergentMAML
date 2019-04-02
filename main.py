@@ -31,7 +31,7 @@ def save_models(exp_key, sender=True, receiver=True):
     if receiver:
         ReceiverAgent.save_model(exp_key)
 
-def main(epochs=10000, task="reptile", D=31, K=10000, L=10, use_images=True, loss_type='pairwise'):
+def main(epochs=10000, task="ic", D=31, K=10000, L=10, use_images=True, loss_type='pairwise'):
     """
     Run epochs of games
     :return:

@@ -47,31 +47,51 @@ class SenderAgent(Agent):
 
         self.pre_feat = self.img_fc(self.pre_feat)
         self.L_pre_feat = tf.keras.layers.RepeatVector(self.L)(self.pre_feat)
-        self.s0 = tf.nn.rnn_cell.LSTMStateTuple(self.pre_feat, self.pre_feat)
-
+        # self.s0 = tf.nn.rnn_cell.LSTMStateTuple(self.pre_feat, self.pre_feat)
+        
         # Create decoding helper
         self.starting_tokens = tf.stack([Agent.V.sos_id] * Agent.batch_size)
         self.starting_embed = tf.nn.embedding_lookup(SenderAgent.embedding, self.starting_tokens)
         self.starting_combined = tf.concat((self.starting_embed, self.pre_feat), axis=1)
+        
+        
         # Determines input to decoder at next time step
         # Copying greedy helper, taken from https://github.com/tensorflow/tensorflow/blob/r1.13/tensorflow/contrib/seq2seq/python/ops/helper.py
-        sample_fn = lambda outputs: tf.argmax(outputs, axis=-1, output_type=tf.int32)
-        def next_inputs_fn(sample_ids):
-            embed = tf.nn.embedding_lookup(SenderAgent.embedding, sample_ids)
-            combined = tf.concat((embed, self.pre_feat), axis=1)
-            return combined
+        # sample_fn = lambda outputs: tf.argmax(outputs, axis=-1, output_type=tf.int32)
+        # def next_inputs_fn(sample_ids):
+        #     embed = tf.nn.embedding_lookup(SenderAgent.embedding, sample_ids)
+        #     combined = tf.concat((embed, self.pre_feat), axis=1)
+        #     return combined
 
-        self.helper = tf.contrib.seq2seq.InferenceHelper(sample_fn=sample_fn,
-                                                         sample_shape=[],
-                                                         sample_dtype=tf.int32,
-                                                         start_inputs=self.starting_combined,
-                                                         end_fn=lambda sample_ids: tf.equal(sample_ids, Agent.V.eos_id),
-                                                         next_inputs_fn = next_inputs_fn
-                                                         )
+       ##   self.helper = tf.contrib.seq2seq.InferenceHelper(sample_fn=sample_fn,
+        #                                                  sample_shape=[],
+        #                                                  sample_dtype=tf.int32,
+        #                                                  start_inputs=self.starting_combined,
+        #                                                  end_fn=lambda sample_ids: tf.equal(sample_ids, Agent.V.eos_id),
+        #                                                  next_inputs_fn = next_inputs_fn
+        #                                                  )
 
-        # self.helper = tf.contrib.seq2seq.GreedyEmbeddingHelper(SenderAgent.embedding, self.starting_tokens, Agent.V.eos_id)
+        self.helper = tf.contrib.seq2seq.GreedyEmbeddingHelper(
+            SenderAgent.embedding, self.starting_tokens, Agent.V.eos_id)
 
         # TODO add attention?
+        
+        # TODO - I think memory sequence length is a vector with the actual length of the caption <= L 
+        # TODO - one tutorial did calculate it in advance
+        self.attention = tf.contrib.seq2seq.BahdanauAttention(
+            Agent.num_hidden, self.L_pre_feat)
+        
+        self.attention_wrapper = tf.contrib.seq2seq.AttentionWrapper(
+            self.rnn_cell, self.attention, 
+            attention_layer_size=Agent.num_hidden/2)
+            
+        self.projection = tf.contrib.rnn.OutputProjectionWrapper(self.attention_wrapper, Agent.K)
+            
+        # [check] might not be necessary
+        self.s0 = \
+            self.projection.zero_state(Agent.batch_size, tf.float32)
+            #Not sure why this doesn't work??? .clone(cell_state=self.pre_feat)
+        
         # self.attention = tf.contrib.seq2seq.BahdanauAttention(Agent.num_hidden, self.pre_feat, self.L)
         #
         # SenderAgent.rnn_cell = tf.contrib.seq2seq.AttentionWrapper(
@@ -88,10 +108,13 @@ class SenderAgent(Agent):
         Build output of agent
         """
         # Decoder
-        self.decoder = tf.contrib.seq2seq.BasicDecoder(self.rnn_cell, self.helper, initial_state=self.s0)
-
+        self.decoder = tf.contrib.seq2seq.BasicDecoder(
+            self.projection, self.helper, initial_state=self.s0)
+        
         self.outputs, self.final_state, self.final_sequence_lengths = \
-            tf.contrib.seq2seq.dynamic_decode(self.decoder, maximum_iterations=Agent.L)
+            tf.contrib.seq2seq.dynamic_decode(self.decoder,
+                impute_finished=True, maximum_iterations=Agent.L)
+        
         # Select rnn_outputs from rnn_outputs: see
         # https://www.tensorflow.org/api_docs/python/tf/contrib/seq2seq/BasicDecoderOutput
         self.rnn_outputs = SenderAgent.output_to_input(self.outputs.rnn_output)
