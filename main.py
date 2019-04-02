@@ -24,20 +24,17 @@ def converged(losses, precision=0.0001, prev_n=3):
 
     return True
 
-def save_models(exp_key, sender=True, receiver=True):
-    # Agent.save_model(exp_key)
-    if sender:
-        SenderAgent.save_model(exp_key)
-    if receiver:
-        ReceiverAgent.save_model(exp_key)
+def save_models(exp_key):
+    SenderAgent.save_model(exp_key)
+    ReceiverAgent.save_model(exp_key)
 
-def main(epochs=10000, task="reptile", D=31, K=10000, L=10, use_images=True, loss_type='pairwise'):
+def main(epochs=10000, task="ic", D=31, K=10000, L=15, loss_type='pairwise'):
     """
     Run epochs of games
     :return:
     """
-    load_key=None
-    track_results=True
+    load_key=None#"854b0b5cc5e846068ec19fa1819285b8"
+    track_results=False
 
     Agent.set_params(K=K, D=D, L=L, loss_type=loss_type)
     dh = Data_Handler(batch_size=Agent.batch_size, group=False)
@@ -84,16 +81,20 @@ def main(epochs=10000, task="reptile", D=31, K=10000, L=10, use_images=True, los
         # Start training
         for e in range(1, epochs + 1):
             print("Training epoch {0}".format(e))
-            accuracy, loss = t.train_epoch(e, mode="train")
-            print("\rloss: {0:1.4f}, accuracy: {1:5.2f}%".format(loss, accuracy * 100), end="\n")
+            train_accuracy, train_loss = t.train_epoch(e, mode="train")
+            print("\rloss: {0:1.4f}, accuracy: {1:5.2f}%".format(train_loss, train_accuracy * 100), end="\n")
             print("Validating epoch {0}".format(e))
-            accuracy, loss = t.train_epoch(e, mode="val")
-            print("\rloss: {0:1.4f}, accuracy: {1:5.2f}%".format(loss, accuracy * 100), end="\n")
-            losses.append(loss)
+            val_accuracy, val_loss = t.train_epoch(e, mode="val")
+            print("\rloss: {0:1.4f}, accuracy: {1:5.2f}%".format(val_loss, val_accuracy * 100), end="\n")
+            losses.append(val_loss)
 
             # End training if 100% communication rate or convergence reached on loss
-            if accuracy == 1.0 or converged(losses):
+            if val_accuracy == 1.0 or converged(losses):
                 break
+
+            # t.train_epoch(e, mode="visual_analysis")
+
+
 
             save_models(exp_key)
 

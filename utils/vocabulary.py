@@ -16,7 +16,6 @@ class Vocabulary:
         self.vocabulary = {}
         self.reverse_vocabulary = {}
         self.vocabulary_counter = {}
-        self.vocabulary_counter_ = {}
 
         # special tokens
         self.sos = '<s>'
@@ -89,7 +88,6 @@ class Vocabulary:
         for tok, count in c.most_common(k - 3):
             self.vocabulary[tok] = id
             self.reverse_vocabulary[id] = tok
-            self.vocabulary_counter_[tok] = count
             id += 1
     
     def get_id(self, token):

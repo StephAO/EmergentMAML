@@ -25,8 +25,8 @@ class ReferentialGame(Task):
         """
         self.sender = Sender
         self.receiver = Receiver
-        super().__init__([Sender, Receiver], **kwargs)
         self.name = "Referential Game"
+        super().__init__([Sender, Receiver], **kwargs)
 
     def train_batch(self, inputs, mode="train"):
         """
@@ -46,5 +46,8 @@ class ReferentialGame(Task):
         self.receiver.fill_feed_dict(fd, images, target_indices)
 
         accuracy, loss, prediction = self.run_game(fd, mode=mode)
+
+        # if mode == "visual_analysis":
+        #     self.visual_analysis(None, prediction[0], out_captions[0])
 
         return accuracy, loss

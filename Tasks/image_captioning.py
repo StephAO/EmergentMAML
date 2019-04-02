@@ -13,8 +13,8 @@ class ImageCaptioning(Task):
     Class for running the image captioner
     """
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
         self.name = "Image Captioning"
+        super().__init__(*args, **kwargs)
         self.captions_required = True
 
     def train_batch(self, inputs, mode="train"):
@@ -32,20 +32,11 @@ class ImageCaptioning(Task):
 
         return accuracy, loss
 
-    def visual_analysis(self, img, predicted_capt, actual_capt):
-        print(self.V.ids_to_tokens(predicted_capt))
-        print(self.V.ids_to_tokens(actual_capt))
-        print("----------------------------------")
-        # img = images[0]
-        # plt.axis('off')
-        # plt.imshow(img)
-        # plt.show()
-
     def get_useable_captions(self, captions):
         """
         returns captions that can be fed to an image captioner (sequences of ids)
         in_captions are prepended by a sos token, while out_captions are the full sequence.
-        Both are capted by the maximum length of a caption
+        Both are capped by the maximum length of a caption
         :param captions:
         :return:
         """

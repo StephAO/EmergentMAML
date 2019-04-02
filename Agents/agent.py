@@ -40,8 +40,9 @@ class Agent(object):
     lr = 0.0005  # self._cyclicLR() #0.005
     gradient_clip = 5.0
     # TODO define temperature better - maybe learnt temperature?
-    temperature = 5.
+    temperature = 1.
     loss_type = None
+    train = True
 
     # OTHER
     epsilon = 1e-12
@@ -61,7 +62,8 @@ class Agent(object):
     V = None
 
     @staticmethod
-    def set_params(K=None, D=None, L=None, lr=None, loss_type=None, batch_size=None, num_hidden=None, temperature=None):
+    def set_params(K=None, D=None, L=None, lr=None, train=None, loss_type=None, batch_size=None, num_hidden=None,
+                   temperature=None):
         """
         Sets agent parameters. Call this before initializing any agent
         """
@@ -69,6 +71,7 @@ class Agent(object):
         Agent.L = L or Agent.L
         Agent.D = D or Agent.D
         Agent.lr = lr or Agent.lr
+        Agent.train = train or Agent.train
         Agent.loss_type = loss_type or Agent.loss_type
         Agent.batch_size = batch_size or Agent.batch_size
         Agent.num_hidden = num_hidden or Agent.num_hidden

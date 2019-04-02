@@ -12,8 +12,8 @@ class ImageSelection(Task):
     class for running the image selector
     """
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
         self.name = "Image Selection"
+        super().__init__(*args, **kwargs)
         self.captions_required = True
         
     def train_batch(self, inputs, mode="train"):

@@ -30,7 +30,7 @@ class Task(object):
         self.train_metrics = {}
         self.val_metrics = {}
         self.experiment = experiment or Experiment(api_key='1jl4lQOnJsVdZR6oekS6WO5FI',
-                                                   project_name='Image Captioning',
+                                                   project_name=self.name,
                                                    auto_param_logging=False, auto_metric_logging=False,
                                                    disabled=(not track_results))
         if experiment is None:
@@ -39,7 +39,6 @@ class Task(object):
             self.params.update(self.dh.get_params())
             self.experiment.log_parameters(self.params)
 
-        self.name = "Base Task"
         self.captions_required = False
 
     def get_experiment_key(self):

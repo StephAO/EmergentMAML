@@ -14,9 +14,10 @@ class ImageCaptioner(SenderAgent):
 
         super()._build_input()
          # (tf.one_hot(self.in_captions, self.K)
-        self.capt_embeddings = tf.nn.embedding_lookup(SenderAgent.embedding, self.in_captions)
-        self.input = tf.concat((self.capt_embeddings, self.L_pre_feat), axis=2)
-        self.helper = tf.contrib.seq2seq.TrainingHelper(self.input, [self.L]*self.batch_size)
+        if Agent.train:
+            self.capt_embeddings = tf.nn.embedding_lookup(SenderAgent.embedding, self.in_captions)
+            self.input = tf.concat((self.capt_embeddings, self.L_pre_feat), axis=2)
+            self.helper = tf.contrib.seq2seq.TrainingHelper(self.input, [self.L]*self.batch_size)
     
     def _build_losses(self):
         """ 
@@ -55,5 +56,6 @@ class ImageCaptioner(SenderAgent):
 
     def fill_feed_dict(self, feed_dict, target_image, in_captions, out_captions):
         feed_dict[self.target_image] = target_image
-        feed_dict[self.in_captions] = in_captions
         feed_dict[self.out_captions] = out_captions
+        if Agent.train:
+            feed_dict[self.in_captions] = in_captions
