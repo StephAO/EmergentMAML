@@ -49,6 +49,9 @@ class ReceiverAgent(Agent):
         self.s0 = ReceiverAgent.rnn_cell.zero_state(Agent.batch_size, dtype=tf.float32)
         self.batch_embedding = tf.tile(tf.expand_dims(ReceiverAgent.embedding, axis=0), [Agent.batch_size, 1, 1])
         self.msg_embeddings = tf.matmul(self.message, self.batch_embedding)
+        self.backwards = tf.reverse(self.msg_embeddings, [1])
+        # self.input = tf.tile(self.msg_mean, [1, self.L, 1])
+        self.input = tf.concat((self.msg_embeddings, self.backwards), axis=1)
 
     def _build_output(self):
         """
@@ -62,7 +65,7 @@ class ReceiverAgent(Agent):
         Get predicted image by finding image with the highest energy
         :return:
         """
-        self.rnn_outputs, self.final_state = tf.nn.dynamic_rnn(ReceiverAgent.rnn_cell, self.msg_embeddings,
+        self.rnn_outputs, self.final_state = tf.nn.dynamic_rnn(ReceiverAgent.rnn_cell, self.input,
                                                                initial_state=self.s0)
         # Get RNN features
         # TODO consider using final rnn_output instead of final_state (not sure which is better)

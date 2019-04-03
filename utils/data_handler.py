@@ -4,6 +4,7 @@ import os
 from pycocotools.coco import COCO
 import pickle
 import tensorflow as tf
+from tqdm import tqdm
 
 # TODO: consider moving this to a better spot
 coco_path = '/home/stephane/cocoapi'
@@ -163,57 +164,62 @@ class Data_Handler:
         self.print_progress(generated, total)
 
     def generate_all_encodings(self):
-
         #  Shared CNN pre-trained on imagenet, see https://github.com/keras-team/keras-applications for other options
-        pre_trained = tf.keras.applications.inception_v3.InceptionV3(include_top=False, weights='imagenet',
-                                                                     pooling='max',
-                                                                     input_shape=(299, 299, 3))
+        pre_trained = tf.keras.applications.inception_v3.InceptionV3(include_top=False, weights='imagenet')
 
         # Create save/load directory
-        dir = '{}/images/{}'.format(self.coco_path, self.feat_dir)
+        dir = '{}/images/'.format(self.coco_path)
         if not os.path.exists(dir):
             os.makedirs(dir)
 
+        image_features = {}
+
         img_ph = tf.placeholder(tf.float32)
-        img_feats = pre_trained(img_ph)
+        pre_img = tf.keras.applications.inception_v3.preprocess_input(img_ph)
+        img_feats = pre_trained(pre_img)
+
         sess = tf.Session()
+        batch_size = 64
 
         sess.run(tf.variables_initializer(tf.global_variables()))
 
-        count = 0
-
         img_list = list(self.coco.getImgIds())
 
-        for img_id in img_list:
+        images = np.zeros((batch_size, 299, 299, 3))
+        image_names = []
+
+        b = 0
+
+        for img_id in tqdm(img_list):
+
             img = self.coco.loadImgs(img_id)[0]
             img_fn = img['file_name']
             img_path = '{}/images/{}/{}'.format(self.coco_path, self.data_dir, img_fn)
-            img = tf.keras.preprocessing.image.load_img(img_path, color_mode='rgb', target_size=(299, 299))
 
+            img = tf.keras.preprocessing.image.load_img(img_path, color_mode='rgb', target_size=(299, 299))
             img = tf.keras.preprocessing.image.img_to_array(img)
 
-            img = np.expand_dims(img, axis=0)
+            images[b] = img
+            image_names.append(img_fn)
+            b += 1
 
-            # Increase channels (by copying) of bw images that don't have 3 channels
-            while img.shape[-1] != 3:
-                assert False
+            if b == batch_size:
 
-            # set image data between -1 and 1
-            img /= 255.
-            img -= 0.5
-            img *= 2.
+                img_feat = sess.run([img_feats], feed_dict={img_ph: images})
 
-            img_feat = sess.run([img_feats], feed_dict={img_ph: img})
+                for i, img in enumerate(img_feat):
+                    image_features[image_names[i]] = img
 
-            img_feat = np.squeeze(img_feat)
-
-            with open('{}/images/{}/{}'.format(self.coco_path, self.feat_dir, img_fn), "wb") as f:
-                pickle.dump(img_feat, f)
-
-            count += 1
+                b = 0
+                image_names = []
 
 
-        self.print_progress(count, len(img_list))
+        print(len(image_features))
+        print(image_features.values()[0].shape)
+        with open('{}/images/{}'.format(self.coco_path, 'image_features.p'), "wb") as f:
+            pickle.dump(image_features, f)
+
+
 
 if __name__ == "__main__":
     dh = Data_Handler()

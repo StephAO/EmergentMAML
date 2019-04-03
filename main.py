@@ -28,7 +28,7 @@ def save_models(exp_key):
     SenderAgent.save_model(exp_key)
     ReceiverAgent.save_model(exp_key)
 
-def main(epochs=10000, task="ic", D=31, K=10000, L=15, loss_type='pairwise'):
+def main(epochs=10000, task="is", D=31, K=10000, L=15, loss_type='pairwise'):
     """
     Run epochs of games
     :return:
@@ -96,7 +96,7 @@ def main(epochs=10000, task="ic", D=31, K=10000, L=15, loss_type='pairwise'):
 
 
 
-            save_models(exp_key)
+            # save_models(exp_key)
 
         Agent.sess.close()
 
