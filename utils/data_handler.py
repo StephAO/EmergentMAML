@@ -187,10 +187,11 @@ class Data_Handler:
 
         images = np.zeros((batch_size, 299, 299, 3))
         image_names = []
+        total = len(img_list)
 
         b = 0
 
-        for img_id in tqdm(img_list):
+        for i, img_id in tqdm(enumerate(img_list)):
 
             img = self.coco.loadImgs(img_id)[0]
             img_fn = img['file_name']
@@ -213,11 +214,22 @@ class Data_Handler:
                 b = 0
                 image_names = []
 
+                if i != 0 and i % (int(total / 10) + 1) == 0:
+                    pb = int(i / (int(total / 10)) + 1)
+                    print(len(image_features))
+                    print(image_features.values()[0].shape)
+                    with open('{}/images/{}{}{}'.format(self.coco_path, 'image_features_', pb, '.p'), "wb") as f:
+                        pickle.dump(image_features, f)
+                        image_features = {}
 
+        pb = int(total / i) + 1
         print(len(image_features))
         print(image_features.values()[0].shape)
-        with open('{}/images/{}'.format(self.coco_path, 'image_features.p'), "wb") as f:
+        with open('{}/images/{}{}{}'.format(self.coco_path, 'image_features_', pb, '.p'), "wb") as f:
             pickle.dump(image_features, f)
+
+
+
 
 
 

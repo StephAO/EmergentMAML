@@ -13,7 +13,9 @@ class ReceiverAgent(Agent):
     # Unique RNN cell and fc rnn output layer
     rnn_cell = tf.nn.rnn_cell.LSTMCell(Agent.num_hidden)
     fc = tf.keras.layers.Dense(Agent.num_hidden, activation=tf.nn.tanh)
-    layers = [fc, rnn_cell]
+    layers = [fc]#, rnn_cell]
+    attention = None
+    attention_wrapper = None
 
     # Shared embedding and image fc layer
     embedding = None
@@ -46,12 +48,21 @@ class ReceiverAgent(Agent):
             - Inputs the message passed from the sender
         """
         # TODO: consider a better starting state for receiver
-        self.s0 = ReceiverAgent.rnn_cell.zero_state(Agent.batch_size, dtype=tf.float32)
         self.batch_embedding = tf.tile(tf.expand_dims(ReceiverAgent.embedding, axis=0), [Agent.batch_size, 1, 1])
         self.msg_embeddings = tf.matmul(self.message, self.batch_embedding)
-        self.backwards = tf.reverse(self.msg_embeddings, [1])
-        # self.input = tf.tile(self.msg_mean, [1, self.L, 1])
-        self.input = tf.concat((self.msg_embeddings, self.backwards), axis=1)
+        # print(self.msg_embeddings.dtype)
+
+
+        # Attention
+        if ReceiverAgent.attention is None:
+            ReceiverAgent.attention = tf.contrib.seq2seq.BahdanauAttention(self.num_hidden, self.msg_embeddings)
+            ReceiverAgent.attention_wrapper = tf.contrib.seq2seq.AttentionWrapper(ReceiverAgent.rnn_cell,
+                                                                                  ReceiverAgent.attention,
+                                                                                  attention_layer_size=Agent.num_hidden)
+            ReceiverAgent.layers.append(ReceiverAgent.attention_wrapper)
+
+        self.s0 = ReceiverAgent.attention_wrapper.zero_state(dtype=tf.float32,batch_size=Agent.batch_size)
+
 
     def _build_output(self):
         """
@@ -65,14 +76,17 @@ class ReceiverAgent(Agent):
         Get predicted image by finding image with the highest energy
         :return:
         """
-        self.rnn_outputs, self.final_state = tf.nn.dynamic_rnn(ReceiverAgent.rnn_cell, self.input,
-                                                               initial_state=self.s0)
+        self.rnn_outputs, self.final_state = tf.nn.dynamic_rnn(ReceiverAgent.attention_wrapper, self.msg_embeddings,
+                                                               initial_state=self.s0, dtype=tf.float32)
         # Get RNN features
         # TODO consider using final rnn_output instead of final_state (not sure which is better)
         # self.rnn_features = tf.keras.layers.Dense(self.num_hidden, activation=tf.nn.leaky_relu)(self.final_state)
         # self.rnn_features = tf.keras.layers.Dense(self.num_hidden, activation=tf.nn.leaky_relu)(self.rnn_features)
 
-        self.rnn_features = ReceiverAgent.fc(self.final_state.c)
+        self.rnn_features = ReceiverAgent.fc(self.final_state.cell_state.c)
+
+        print(ReceiverAgent.rnn_cell.weights)
+        print(ReceiverAgent.attention_wrapper.weights)
 
         # Get image features
         # TODO - can we do this with only matrices?

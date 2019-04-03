@@ -34,7 +34,7 @@ def main(epochs=10000, task="is", D=31, K=10000, L=15, loss_type='pairwise'):
     :return:
     """
     load_key=None#"854b0b5cc5e846068ec19fa1819285b8"
-    track_results=False
+    track_results=True
 
     Agent.set_params(K=K, D=D, L=L, loss_type=loss_type)
     dh = Data_Handler(batch_size=Agent.batch_size, group=False)
