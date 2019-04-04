@@ -32,7 +32,7 @@ class Agent(object):
     # MODEL PARAMETERS
     freeze_cnn = False
     num_hidden = 512
-    batch_size = 64
+    batch_size = 128
     emb_size = 300
 
     # TRAINING PARAMETERS
@@ -42,7 +42,9 @@ class Agent(object):
     # TODO define temperature better - maybe learnt temperature?
     temperature = 1.
     loss_type = None
+    straight_through = True
     train = True
+    split_sr = True # if true Sender and receiver have separate rnns during reptile training
 
     # OTHER
     epsilon = 1e-12
@@ -87,10 +89,13 @@ class Agent(object):
             "D": Agent.D,
             "L": Agent.L,
             "lr": Agent.lr,
+            "split_sr": Agent.split_sr,
             "loss_type": Agent.loss_type,
             "batch_size": Agent.batch_size,
             "num_hidden": Agent.num_hidden,
-            "temperature": Agent.temperature
+            "temperature": Agent.temperature,
+            "embedding_size": Agent.emb_size,
+            "straight_through": Agent.straight_through
         }
 
         return params

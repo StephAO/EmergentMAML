@@ -4,21 +4,25 @@ import tensorflow_probability as tfp
 from .agent import Agent
 
 class SenderAgent(Agent):
-    # Unique RNN cell and fc rnn output layer
     rnn_cell = tf.nn.rnn_cell.LSTMCell(Agent.num_hidden)
+    # Unique fc rnn output layer
     output_to_input = None
-    layers = [rnn_cell]
+    layers = []
 
     # Shared embedding and image fc layer
     embedding = None
     img_fc = tf.keras.layers.Dense(Agent.num_hidden)
     shared_layers = [img_fc]
 
+    if Agent.split_sr:
+        layers += [rnn_cell]
+    else:
+        shared_layers += [rnn_cell]
+
     saver = None
     loaded = False
 
-    def __init__(self, straight_through=True, load_key=None):
-        self.straight_through=straight_through
+    def __init__(self, load_key=None):
         # Setup rnn output to input layer and embedding if it hasn't already been done
         if SenderAgent.output_to_input is None:
             SenderAgent.output_to_input = tf.layers.Dense(Agent.K)
@@ -46,25 +50,25 @@ class SenderAgent(Agent):
         self.pre_feat = self.target_image / tf.maximum(tf.reduce_max(tf.abs(self.target_image), axis=1, keepdims=True), Agent.epsilon)
 
         self.pre_feat = self.img_fc(self.pre_feat)
-        self.L_pre_feat = tf.keras.layers.RepeatVector(self.L)(self.pre_feat)
-        self.s0 = tf.nn.rnn_cell.LSTMStateTuple(self.pre_feat, self.pre_feat)
+        # self.L_pre_feat = tf.keras.layers.RepeatVector(self.L)(self.pre_feat)
+        self.s0 = tf.nn.rnn_cell.LSTMStateTuple(self.pre_feat, tf.zeros((Agent.batch_size, Agent.num_hidden)))
 
         # Create decoding helper
         self.starting_tokens = tf.stack([Agent.V.sos_id] * Agent.batch_size)
         self.starting_embed = tf.nn.embedding_lookup(SenderAgent.embedding, self.starting_tokens)
-        self.starting_combined = tf.concat((self.starting_embed, self.pre_feat), axis=1)
+        # self.starting_combined = tf.concat((self.starting_embed, self.pre_feat), axis=1)
         # Determines input to decoder at next time step
         # Copying greedy helper, taken from https://github.com/tensorflow/tensorflow/blob/r1.13/tensorflow/contrib/seq2seq/python/ops/helper.py
         sample_fn = lambda outputs: tf.argmax(outputs, axis=-1, output_type=tf.int32)
         def next_inputs_fn(sample_ids):
             embed = tf.nn.embedding_lookup(SenderAgent.embedding, sample_ids)
-            combined = tf.concat((embed, self.pre_feat), axis=1)
-            return combined
+            # combined = tf.concat((embed, self.pre_feat), axis=1)
+            return embed
 
         self.helper = tf.contrib.seq2seq.InferenceHelper(sample_fn=sample_fn,
                                                          sample_shape=[],
                                                          sample_dtype=tf.int32,
-                                                         start_inputs=self.starting_combined,
+                                                         start_inputs=self.starting_embed,
                                                          end_fn=lambda sample_ids: tf.equal(sample_ids, Agent.V.eos_id),
                                                          next_inputs_fn = next_inputs_fn
                                                          )
@@ -102,7 +106,7 @@ class SenderAgent(Agent):
         self.dist = tfp.distributions.RelaxedOneHotCategorical(Agent.temperature, logits=self.rnn_outputs)
         self.message = self.dist.sample()
 
-        if self.straight_through:
+        if Agent.straight_through:
             self.message_hard = tf.cast(tf.one_hot(tf.argmax(self.message, -1), self.K), self.message.dtype)
             self.message = tf.stop_gradient(self.message_hard - self.message) + self.message
 

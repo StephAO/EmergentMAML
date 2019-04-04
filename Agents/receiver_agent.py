@@ -10,15 +10,20 @@ def cosine_similarity(a, b, axis=1):
 
 
 class ReceiverAgent(Agent):
-    # Unique RNN cell and fc rnn output layer
     rnn_cell = tf.nn.rnn_cell.LSTMCell(Agent.num_hidden)
+    # Unique RNN cell and fc rnn output layer
     fc = tf.keras.layers.Dense(Agent.num_hidden, activation=tf.nn.tanh)
-    layers = [fc, rnn_cell]
+    layers = [fc]
 
     # Shared embedding and image fc layer
     embedding = None
     img_fc = tf.keras.layers.Dense(Agent.num_hidden, activation=tf.nn.tanh)
     shared_layers = [img_fc]
+
+    if Agent.split_sr:
+        layers += [rnn_cell]
+    else:
+        shared_layers += [rnn_cell]
 
     saver = None
     loaded = False

@@ -6,7 +6,7 @@ from Tasks import image_captioning as ic, referential_game as rg
 from utils.variables import *
 from Agents import Agent, SenderAgent, ReceiverAgent, ImageCaptioner, ImageSelector
 from Tasks import Task, ReferentialGame, ImageCaptioning, ImageSelection
-from utils.data_handler import Data_Handler
+from utils.data_handler import Data_Handler, project_path
 import tensorflow as tf
 
 """
@@ -31,8 +31,6 @@ class Reptile(Task):
         self.R = ReceiverAgent(*self.S.get_output())
         self.IC = ImageCaptioner()
         self.IS = ImageSelector()
-
-        self.step = 1
 
         self.train_metrics = {}
         self.val_metrics = {}
@@ -61,6 +59,12 @@ class Reptile(Task):
         self.sender_own_state = VariableState(self.sess, SenderAgent.get_weights())
         self.receiver_own_state = VariableState(self.sess, ReceiverAgent.get_weights())
 
+        # print(SenderAgent.get_shared_weights())
+        # print(ReceiverAgent.get_shared_weights())
+        # print(SenderAgent.get_weights())
+        # print(ReceiverAgent.get_weights())
+        # print(tf.trainable_variables())
+
         self.shared_states = {"shared_sender": self.sender_shared_state, "shared_receiver": self.receiver_shared_state}
         self.own_states = {"own_sender": self.sender_own_state, "own_receiver": self.receiver_own_state}
 
@@ -75,6 +79,11 @@ class Reptile(Task):
         self.set_weights(new_shared_weights=shared_average)
 
         self.dh = data_handler
+        with open("{}/data/csv_loss_{}.csv".format(project_path, self.experiment.get_key()), 'w+') as csv_loss_file:
+            csv_loss_file.write("Image Captioner Loss,Image Selector Loss,Sender Loss,Receiver Loss\n")
+        with open("{}/data/csv_accuracy_{}.csv".format(project_path, self.experiment.get_key()), 'w+') as csv_acc_file:
+            csv_acc_file.write("Image Captioner Loss,Image Selector Loss,Sender Loss,Receiver Loss\n")
+
 
     def get_diff(self, a, b):
         diff = 0.
@@ -100,51 +109,48 @@ class Reptile(Task):
                 s.import_variables(new_shared_weights)
 
     def train_epoch(self, e, mode=None):
+        self.experiment.set_step(e)
         image_gen = self.dh.get_images(return_captions=True, mode="train")
-        self.experiment.set_step(self.step)
+        # Get current variables
         start_vars = {k: s.export_variables() for k, s in self.own_states.items()}
         start_vars["shared"] = self.shared_states["shared_sender"].export_variables()
 
+        # Save current variables
+        old_own = {k: s.export_variables() for k, s in self.own_states.items()}
+        new_own = {k: [] for k, s in self.own_states.items()}
+        old_shared = self.shared_states["shared_sender"].export_variables()
+        new_shared = []
 
-        while True:
-            try:
-                # Save current variables
-                old_own = {k: s.export_variables() for k, s in self.own_states.items()}
-                new_own = {k: [] for k, s in self.own_states.items()}
-                old_shared = self.shared_states["shared_sender"].export_variables()
-                new_shared = []
+        # For each task
+        for task in ["Image Captioner", "Image Selector", "Sender", "Receiver"]:
+            # parameter setup to not waste data
+            if task in ["Sender", "Receiver", "Image Selector"]:
+                self.dh.set_params(images_per_instance=Agent.D+1)
+            else:
+                self.dh.set_params(images_per_instance=1)
+            # Run task n times
+            for _ in range(self.N):
+                images, captions = next(image_gen)
+                acc, loss = self.T[task](images, captions)
+            self.train_metrics[task + " Accuracy"] = acc
+            self.train_metrics[task + " Loss"] = loss
 
-                # For each task
-                for task in ["Image Captioner", "Image Selector", "Sender", "Receiver"]:
-                    # parameter setup to not waste data
-                    if task in ["Sender", "Receiver", "Image Selector"]:
-                        self.dh.set_params(images_per_instance=Agent.D+1)
-                    else:
-                        self.dh.set_params(images_per_instance=1)
-                    # Run task n times
-                    for _ in range(self.N):
-                        images, captions = next(image_gen)
-                        acc, loss = self.T[task](images, captions)
-                    self.train_metrics[task + " Accuracy"] = acc
-                    self.train_metrics[task + " Loss"] = loss
-                    # Store new variables
-                    [new_own[k].append(s.export_variables()) for k, s in self.own_states.items()]
-                    [new_shared.append(s.export_variables()) for k, s in self.shared_states.items()]
+            # Store new variables
+            [new_own[k].append(s.export_variables()) for k, s in self.own_states.items()]
+            [new_shared.append(s.export_variables()) for k, s in self.shared_states.items()]
 
-                    # Reset to old variables for next task
-                    [s.import_variables(old_own[k]) for k, s in self.own_states.items()]
-                    [s.import_variables(old_shared) for k, s in self.shared_states.items()]
-                self.experiment.log_metrics(self.train_metrics)
-                self.step += 1
-                self.experiment.set_step(self.step)
-                # Average new variables
-                new_own = {k: interpolate_vars(old_own[k], average_vars(new_own[k]), 0.1) for k, s in self.own_states.items()}
-                new_shared = interpolate_vars(old_shared, average_vars(new_shared), 0.1)
-                # Set variables to new variables
-                self.set_weights(new_own_weights=new_own, new_shared_weights=new_shared)
+            # Reset to old variables for next task
+            [s.import_variables(old_own[k]) for k, s in self.own_states.items()]
+            [s.import_variables(old_shared) for k, s in self.shared_states.items()]
 
-            except StopIteration:
-                break
+        self.experiment.log_metrics(self.train_metrics)
+        # Average new variables
+        new_own = {k: interpolate_vars(old_own[k], average_vars(new_own[k]), 0.1) for k, s in self.own_states.items()}
+        new_shared = interpolate_vars(old_shared, average_vars(new_shared), 0.1)
+        # Set variables to new variables
+        self.set_weights(new_own_weights=new_own, new_shared_weights=new_shared)
+
+        # Get change in weights
         end_vars = {k: s.export_variables() for k, s in self.own_states.items()}
         end_vars["shared"] = self.shared_states["shared_sender"].export_variables()
         weight_diff = self.get_diff(start_vars, end_vars)
@@ -152,6 +158,21 @@ class Reptile(Task):
         #self.experiment.set_step(e)
         self.val_metrics["Weight Change"] = weight_diff
         self.experiment.log_metrics(self.val_metrics)
+
+        # Log data to a csv
+        with open("{}/data/csv_loss_{}.csv".format(project_path, self.experiment.get_key()), 'a') as csv_loss_file, \
+             open("{}/data/csv_accuracy_{}.csv".format(project_path, self.experiment.get_key()), 'a') as csv_acc_file:
+            losses = []
+            accs = []
+            for task in ["Image Captioner", "Image Selector", "Sender", "Receiver"]:
+                losses.append(str(self.train_metrics[task + " Loss"]))
+                accs.append(str(self.train_metrics[task + " Accuracy"]))
+
+            csv_loss_file.write(",".join(losses))
+            csv_loss_file.write("\n")
+
+            csv_acc_file.write(",".join(accs))
+            csv_acc_file.write("\n")
 
         return 0, weight_diff
 
