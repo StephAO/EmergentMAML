@@ -6,15 +6,18 @@ import pickle
 import string
 import tensorflow as tf
 from collections import Counter
+import nltk
 
 # TODO: consider moving this to a better spot
 from utils.data_handler import coco_path, project_path
-from Agents import Agent, ImageCaptioner
+from Agents import Agent, ImageCaptioner, ImageSelector
+from utils.BLEU import *
 
 class Evaluator:
 
-    def __init__(self, image_captioner):
+    def __init__(self, image_captioner, image_selector):
         self.ic = image_captioner
+        self.is_ = image_selector
         self.ops = self.ic.get_output()
         self.batch_size = Agent.batch_size
         self.V = Agent.V
@@ -22,7 +25,9 @@ class Evaluator:
         # Word counters
         self.generated_word_counter = {}
         self.annotation_word_counter = {}
-
+        self.batch_omission_score = []
+        self.bleu_scores = { ngram: [] for ngram in [1,2,3] }
+        
         # MSCOCO variables
         self.coco_path = coco_path
         self.feat_dir = 'train_feats'
@@ -78,13 +83,59 @@ class Evaluator:
                     captions, predictions = self.run_batch((img_batches, cap_batches))
                     self.update_count(cat["name"], captions, predicted=False)
                     self.update_count(cat["name"], predictions, predicted=True)
+                    
+                    self._calculate_omission_score(img_batches, predictions)
+                    self._calculate_bleu_score(predictions, cap_batches)
+                    
                     img_count = 0
                     cap_batches = []
 
                     generated += self.batch_size
                     self.print_progress(generated, total)
-
-
+    
+    def _calculate_bleu_score(self, preds, true_caps):
+        pred_caps = []
+        for i in range(Agent.batch_size):
+            caption = self.V.ids_to_tokens(preds[i])
+            pred_caps.append(caption)
+            
+        # can only do this for sentence level bleu scores (change if we want to report corpus level)
+        for ngram, scores in self.bleu_scores.items():
+            scores.append(BLEU.get_sentence_score(pred_caps, true_caps, N=ngram))
+    
+    def _calculate_omission_score(self, images, messages):
+        
+        # TODO - get distractors
+        
+        orig_messages = np.zeros((Agent.batch_size, Agent.L, Agent.K))
+        
+        for i in range(Agent.batch_size):
+            orig_messages[i,np.arange(self.L),messages[i]] = 1
+            
+        # calculate the prob of the target image given the original caption
+        fd = {}
+        target_indices = np.zeros(self.batch_size, dtype=int)
+        is_.fill_feed_dict(fd, orig_messages, [images, images], target_indices)
+        orig_probs = Agent.sess.run(is_.prob_dist, feed_dict=fd)[np.arange(self.batch_size),target_indices]
+        orig_probs = orig_probs.reshape((Agent.batch_size, 1))
+        
+        mod_probs = []
+        for l in range(self.L):
+            eos = np.zeros((Agent.batch_size, 1, Agent.K))
+            eos[:,:,self.V.eos_id] = 1
+            mod_messages = np.concatenate([np.delete(orig_messages, l, axis=1), eos], axis=1)
+            
+            mod_fd = {}
+            target_indices = np.zeros(self.batch_size, dtype=int)
+            is_.fill_feed_dict(mod_fd, mod_messages, [images, images], target_indices)
+            curr_mod_probs = Agent.sess.run(is_.prob_dist, feed_dict=mod_fd)[np.arange(self.batch_size),target_indices]
+            mod_probs.append(curr_mod_probs)
+            
+        mod_probs = np.stack(mod_probs, axis=1)
+        word_omission_score = orig_probs - mod_probs
+        sent_omission_score = np.max(word_omission_score, axis=1)
+        self.batch_omission_score.append(np.mean(sent_omission_score))
+    
     def run_batch(self, inputs, mode="train"):
         """
         Run the Image captioning to learn parameters
@@ -155,18 +206,20 @@ class Evaluator:
 
 
 if __name__ == "__main__":
-    load_key = "3bf9625ce5ee4bdda514aa4b40ae72db"
+    load_key = "b4213146f7a445bf9b3e15730a9f7743"
 
-    Agent.set_params(K=10000, D=1, L=15, batch_size=128, train=False)
+    Agent.set_params(K=10000, D=1, L=15, batch_size=128, train=False, loss_type='pairwise')
 
     with tf.variable_scope("all", reuse=tf.AUTO_REUSE):
         ic = ImageCaptioner(load_key=load_key)
+        is_ = ImageSelector(load_key=load_key)
+        
         # Initialize TF
         variables_to_initialize = tf.global_variables()
-        dont_initialize = ImageCaptioner.get_all_weights()
+        dont_initialize = ImageCaptioner.get_all_weights() + ImageSelector.get_all_weights()
         variables_to_initialize = [v for v in tf.global_variables() if v not in dont_initialize]
         Agent.sess.run(tf.variables_initializer(variables_to_initialize))
-        e = Evaluator(ic)
+        e = Evaluator(ic, is_)
         e.run()
         e.get_statistics()
 
