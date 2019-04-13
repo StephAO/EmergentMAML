@@ -52,6 +52,7 @@ class SenderAgent(Agent):
         self.pre_feat = self.img_fc(self.pre_feat)
         # self.L_pre_feat = tf.keras.layers.RepeatVector(self.L)(self.pre_feat)
         self.s0 = tf.nn.rnn_cell.LSTMStateTuple(self.pre_feat, tf.zeros((Agent.batch_size, Agent.num_hidden)))
+        # self.bsd_s0 = tf.contrib.seq2seq.tile_batch(self.s0, multiplier=Agent.beam_width)
 
         # Create decoding helper
         self.starting_tokens = tf.stack([Agent.V.sos_id] * Agent.batch_size)
@@ -92,13 +93,21 @@ class SenderAgent(Agent):
         Build output of agent
         """
         # Decoder
+        # if Agent.train:
         self.decoder = tf.contrib.seq2seq.BasicDecoder(self.rnn_cell, self.helper, initial_state=self.s0)
+        # else:
+        #     self.decoder = tf.contrib.seq2seq.BeamSearchDecoder(self.rnn_cell, SenderAgent.embedding,
+        #                                                         self.starting_tokens, Agent.V.eos_id,
+        #                                                         self.bsd_s0, beam_width=Agent.beam_width,
+        #                                                         output_layer=SenderAgent.output_to_input)
 
         self.outputs, self.final_state, self.final_sequence_lengths = \
             tf.contrib.seq2seq.dynamic_decode(self.decoder, maximum_iterations=Agent.L)
         # Select rnn_outputs from rnn_outputs: see
         # https://www.tensorflow.org/api_docs/python/tf/contrib/seq2seq/BasicDecoderOutput
+        # if Agent.train:
         self.rnn_outputs = SenderAgent.output_to_input(self.outputs.rnn_output)
+
 
         # TODO: consider annealing temperature
         # self.temperature = tf.clip_by_value(10000. / tf.cast(self.epoch, tf.float32), 0.5, 10.)
@@ -111,6 +120,10 @@ class SenderAgent(Agent):
             self.message = tf.stop_gradient(self.message_hard - self.message) + self.message
 
         self.prediction = tf.argmax(tf.nn.softmax(self.rnn_outputs), axis=2, output_type=tf.int32)
+        self.probabilities = tf.nn.softmax(self.rnn_outputs)
+
+        # else:
+        #     self.probabilities = self.outputs.predicted_ids
 
     def get_output(self):
         return self.message, self.final_sequence_lengths
@@ -122,5 +135,4 @@ class SenderAgent(Agent):
         :param target_image: image to fill placeholder with
         """
         feed_dict[self.target_image] = target_image
-
 

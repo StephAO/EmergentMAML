@@ -172,6 +172,7 @@ class ReceiverAgent(Agent):
         :param candidates: image for each candidate
         :param target_idx: target idx
         """
-        fd[self.target_indices] = target_idx
         for i, c in enumerate(candidates):
             fd[self.candidates[i]] = c
+        if Agent.train:
+            fd[self.target_indices] = target_idx

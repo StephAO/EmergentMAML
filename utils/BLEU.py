@@ -23,6 +23,9 @@ class BLEU:
             curr_references = references[c]
             
             curr_candidate = BLEU._tokenize(curr_candidate)
+            if len(curr_candidate) == 0:
+                print("YELP")
+                continue
             curr_references = [BLEU._tokenize(ref) for ref in curr_references]
             
             references_len = [len(ref) for ref in curr_references]

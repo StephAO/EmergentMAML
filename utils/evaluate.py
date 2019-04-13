@@ -7,6 +7,7 @@ import string
 import tensorflow as tf
 from collections import Counter
 import nltk
+from tqdm import tqdm
 
 # TODO: consider moving this to a better spot
 from utils.data_handler import coco_path, project_path
@@ -18,15 +19,15 @@ class Evaluator:
     def __init__(self, image_captioner, image_selector):
         self.ic = image_captioner
         self.is_ = image_selector
-        self.ops = self.ic.get_output()
+        self.ops = [self.ic.prediction, self.ic.probabilities]
         self.batch_size = Agent.batch_size
         self.V = Agent.V
         self.L = Agent.L
         # Word counters
         self.generated_word_counter = {}
         self.annotation_word_counter = {}
-        self.batch_omission_score = []
-        self.bleu_scores = { ngram: [] for ngram in [1,2,3] }
+        self.omission_scores = []
+        self.bleu_scores = {ngram: [] for ngram in [1,2,3,4] }
         
         # MSCOCO variables
         self.coco_path = coco_path
@@ -51,73 +52,111 @@ class Evaluator:
         :param mode[str]: "train" or "val" for training or validation set
         :return: a list of images, optionally a list of captions
         """
+
+        # for cat_id in self.cat_ids:
+        #     cat_imgs = self.coco.getImgIds(catIds=cat_id)
+        #     total += len(cat_imgs)
+
+        all_img_ids = self.coco.getImgIds()
+        np.random.shuffle(all_img_ids)
+        all_img_ids = all_img_ids[:10000]
         generated = 0
-        total = 0
-        for cat_id in self.cat_ids:
-            cat_imgs = self.coco.getImgIds(catIds=cat_id)
-            total += len(cat_imgs)
 
-        for cat_id in self.cat_ids:
-            cat = self.coco.loadCats(ids=cat_id)[0]
-            cat_imgs = self.coco.getImgIds(catIds=cat_id)
-            img_batches = np.zeros((self.batch_size, 2048), dtype=np.float32)
-            cap_batches = []
-            img_count = 0
-            for img_id in cat_imgs:
-                img = self.coco.loadImgs(img_id)[0]
-                with open('{}/images/{}/{}'.format(self.coco_path, self.feat_dir, img['file_name']), "rb") as f:
-                    img = pickle.load(f)
+        self.corpus_log_probability = 1.0
+        self.accuracy = []
+        self.lengths = []
 
-                img_batches[img_count] = img
+        ### Uncomment for qualitative analysis
+        # for cat_id in self.cat_ids:
+        #     cat = self.coco.loadCats(ids=cat_id)[0]
+        #     cat_imgs = self.coco.getImgIds(catIds=cat_id)
+        #     img_batches = np.zeros((self.batch_size, 2048), dtype=np.float32)
+        #     cap_batches = []
+        #     img_count = 0
+        #     for img_id in cat_imgs:
+        img_count = 0
+        img_batches = np.zeros((self.batch_size, 2048), dtype=np.float32)
+        cap_batches = []
+        for img_id in tqdm(all_img_ids):
+            img = self.coco.loadImgs(img_id)[0]
+            with open('{}/images/{}/{}'.format(self.coco_path, self.feat_dir, img['file_name']), "rb") as f:
+                img = pickle.load(f)
 
-                img_captions = []
-                ann_id = self.coco_capts.getAnnIds(imgIds=img_id)
-                anns = self.coco_capts.loadAnns(ann_id)
-                for a in anns:
-                    img_captions.append(a['caption'])
-                cap_batches.append(img_captions)
+            img_batches[img_count] = img
 
-                img_count += 1
+            img_captions = []
+            ann_id = self.coco_capts.getAnnIds(imgIds=img_id)
+            anns = self.coco_capts.loadAnns(ann_id)
+            for a in anns:
+                img_captions.append(self.get_useable_captions(a['caption']))
+            cap_batches.append(img_captions)
 
-                if img_count >= self.batch_size:
-                    captions, predictions = self.run_batch((img_batches, cap_batches))
-                    self.update_count(cat["name"], captions, predicted=False)
-                    self.update_count(cat["name"], predictions, predicted=True)
-                    
-                    self._calculate_omission_score(img_batches, predictions)
-                    self._calculate_bleu_score(predictions, cap_batches)
-                    
-                    img_count = 0
-                    cap_batches = []
+            img_count += 1
 
-                    generated += self.batch_size
-                    self.print_progress(generated, total)
-    
-    def _calculate_bleu_score(self, preds, true_caps):
-        pred_caps = []
+            if img_count >= self.batch_size:
+                predictions, probabilities = self.run_batch((img_batches, cap_batches))
+                # self.update_count(cat["name"], cap_batches, predicted=False)
+                # self.update_count(cat["name"], [predictions], predicted=True)
+                self.update_count("all", cap_batches, predicted=False)
+                self.update_count("all", [predictions], predicted=True)
+
+                candidates = np.zeros((Agent.D + 1, Agent.batch_size, 2048))
+                candidates[0, :] = img_batches
+                distractor_ids = np.random.choice(all_img_ids, Agent.D * Agent.batch_size, replace=False)
+                distractor_imgs = self.coco.loadImgs(distractor_ids)
+                for d in range(Agent.D):
+                    for bs in range(Agent.batch_size):
+                        img = distractor_imgs[d * Agent.D + bs]
+                        with open('{}/images/{}/{}'.format(self.coco_path, self.feat_dir, img['file_name']), "rb") as f:
+                            feats = pickle.load(f)
+                            candidates[d + 1, bs] = feats
+
+                self._calculate_omission_score(candidates, predictions)
+                self._calculate_bleu_score(predictions, cap_batches)
+                self._update_corpus_probability(probabilities, cap_batches)
+
+                img_count = 0
+                cap_batches = []
+
+                generated += self.batch_size
+
+    def _calculate_bleu_score(self, pred_ids, true_caps_ids):
+        pred_toks = []
+        true_caps_toks = []
         for i in range(Agent.batch_size):
-            caption = self.V.ids_to_tokens(preds[i])
-            pred_caps.append(caption)
-            
+            true_caps_toks.append([])
+            pt = self.V.ids_to_tokens(pred_ids[i], filter_eos=True)
+            pred_toks.append(pt)
+            # print(pt)
+            self.lengths.append(len(pt.split()))
+            for tc in true_caps_ids[i]:
+                true_caps_toks[i].append(self.V.ids_to_tokens(tc, filter_eos=True))
+
+        # print("-----")
+        # print(pred_toks[0])
+        # print(true_caps_toks[0][0])
         # can only do this for sentence level bleu scores (change if we want to report corpus level)
         for ngram, scores in self.bleu_scores.items():
-            scores.append(BLEU.get_sentence_score(pred_caps, true_caps, N=ngram))
+            scores.append(BLEU.get_score(pred_toks, true_caps_toks, N=ngram))
     
-    def _calculate_omission_score(self, images, messages):
+    def _calculate_omission_score(self, candidates, messages):
         
-        # TODO - get distractors
+        messages = messages.astype(np.int32)
         
         orig_messages = np.zeros((Agent.batch_size, Agent.L, Agent.K))
         
         for i in range(Agent.batch_size):
-            orig_messages[i,np.arange(self.L),messages[i]] = 1
+            orig_messages[i, np.arange(self.L), messages[i]] = 1
             
         # calculate the prob of the target image given the original caption
         fd = {}
-        target_indices = np.zeros(self.batch_size, dtype=int)
-        is_.fill_feed_dict(fd, orig_messages, [images, images], target_indices)
-        orig_probs = Agent.sess.run(is_.prob_dist, feed_dict=fd)[np.arange(self.batch_size),target_indices]
+        target_indices = np.zeros(self.batch_size, dtype=np.int32)
+        self.is_.fill_feed_dict(fd, orig_messages, candidates, target_indices)
+        probs, pred = Agent.sess.run([self.is_.prob_dist, self.is_.prediction], feed_dict=fd)
+        orig_probs = probs[np.arange(self.batch_size),target_indices]
         orig_probs = orig_probs.reshape((Agent.batch_size, 1))
+        accuracy = (Agent.batch_size - np.count_nonzero(pred)) / Agent.batch_size
+        self.accuracy.append(accuracy)
         
         mod_probs = []
         for l in range(self.L):
@@ -127,31 +166,106 @@ class Evaluator:
             
             mod_fd = {}
             target_indices = np.zeros(self.batch_size, dtype=int)
-            is_.fill_feed_dict(mod_fd, mod_messages, [images, images], target_indices)
+            self.is_.fill_feed_dict(mod_fd, mod_messages, candidates, target_indices)
             curr_mod_probs = Agent.sess.run(is_.prob_dist, feed_dict=mod_fd)[np.arange(self.batch_size),target_indices]
             mod_probs.append(curr_mod_probs)
             
         mod_probs = np.stack(mod_probs, axis=1)
         word_omission_score = orig_probs - mod_probs
         sent_omission_score = np.max(word_omission_score, axis=1)
-        self.batch_omission_score.append(np.mean(sent_omission_score))
+        self.omission_scores.append(np.mean(sent_omission_score))
+
+    def _update_corpus_probability(self, probabilities, captions):
+        for bs in range(Agent.batch_size):
+            caption_probabilities = []
+            for c in range(len(captions[bs])):
+                p = 0.0
+                for l in range(Agent.L):
+                    p += np.log2(max(probabilities[bs][l][captions[bs][c][l]], 1e-20))
+                    if captions[bs][c][l] == self.V.eos_id:
+                        break
+                caption_probabilities.append(p)
+            self.corpus_log_probability += np.mean(caption_probabilities)
+
+    def _perplexity(self, corpus_size):
+        return np.power(2.0, -(self.corpus_log_probability / corpus_size))
+
+    def _KL_divergence(self, caption_word_counts, generated_word_counts):
+        caption_word_counts.sort()
+        generated_word_counts.sort()
+        P = np.array(generated_word_counts) / float(np.sum(generated_word_counts))
+        Q = np.array(caption_word_counts) / float(np.sum(caption_word_counts))
+        print(len(caption_word_counts), len(generated_word_counts))
+        sum = 0.0
+        for i in range(len(caption_word_counts)):
+            if i >= len(generated_word_counts):
+                break
+            sum += P[i] * np.log(P[i] / Q[i])
+        return sum
+
+    def beam_search(self, images, captions, beam_width=3):
+        # BEAM SEARCH
+
+        # Get starting probabilities
+        candidate_seq = np.full((Agent.batch_size, 1), Agent.V.sos_id, dtype=np.int32)
+        fd = {}
+        self.ic.fill_feed_dict(fd, images, candidate_seq, None, seq_len=1)
+        prediction, probabilities = Agent.sess.run(self.ops, feed_dict=fd)
+        # Create best base sequences
+        top_indices = np.argpartition(probabilities, -beam_width)[:, :, -beam_width:]
+        tiled_sos_input = np.tile(np.expand_dims(candidate_seq, 0), (beam_width, 1, 1))
+        candidate_seq = np.concatenate([tiled_sos_input, np.transpose(top_indices, (2, 0, 1))], axis=2)
+        # Set candidate scores
+        candidate_scores = np.zeros((beam_width, self.batch_size))
+        for bw in range(beam_width):
+            candidate_scores[bw] = probabilities[range(self.batch_size), 0, top_indices[:, 0, bw]]
+
+        # For each timestep
+        for t in range(2, Agent.L + 1):
+
+            new_candidates = np.zeros((beam_width ** 2, Agent.batch_size, t + 1))
+            new_candidate_scores = np.zeros((beam_width ** 2, Agent.batch_size))
+            ps = np.zeros((beam_width ** 2, Agent.batch_size, Agent.L, Agent.K), dtype=np.float64)
+            nc = 0
+            for cs, css in zip(candidate_seq, candidate_scores):
+                fd = {}
+                self.ic.fill_feed_dict(fd, images, cs, None, seq_len=t)
+                prediction, probabilities = Agent.sess.run(self.ops, feed_dict=fd)
+                top_indices = np.argpartition(probabilities[:, -1, None, :], -beam_width)[:, :, -beam_width:]
+
+                tiled_seq = np.tile(np.expand_dims(cs, 0), (beam_width, 1, 1))
+                candidate_seq = np.concatenate([tiled_seq, np.transpose(top_indices, (2, 0, 1))], axis=2)
+                for bw in range(beam_width):
+                    ps[nc, :, :t, :] = probabilities
+                    new_candidates[nc] = candidate_seq[bw]
+                    new_candidate_scores[nc] = css * probabilities[range(self.batch_size), -1, top_indices[:, -1, bw]]
+                    nc += 1
+
+            if t >= Agent.L:
+                break
+
+            top_indices = np.argpartition(new_candidate_scores, -beam_width, axis=0)[-beam_width:]
+            candidate_seq = new_candidates[top_indices, range(self.batch_size)]
+            candidate_scores = new_candidate_scores[top_indices, range(self.batch_size)]
+
+        top_index = np.argmax(candidate_scores, axis=0)
+        prediction = candidate_seq[top_index, range(self.batch_size), 1:]
+        probabilities = ps[top_index, range(self.batch_size)]
+        # probabilities = candidate_scores[top_index, range(self.batch_size)]
+        return prediction, probabilities
     
-    def run_batch(self, inputs, mode="train"):
+    def run_batch(self, inputs, mode="train", beam_search=False, greedy=False):
         """
-        Run the Image captioning to learn parameters
+        Run the Image captioning and return prediction and probability of the sequence
         """
         images, captions = inputs
         images = np.squeeze(images)
 
-        in_captions, out_captions = self.get_useable_captions(captions)
+        prediction, probabilities = self.beam_search(images, captions, beam_width=3)
 
-        fd = {}
-        self.ic.fill_feed_dict(fd, images, in_captions, out_captions)
-        accuracy, loss, prediction = Agent.sess.run(self.ops, feed_dict=fd)
+        return prediction, probabilities
 
-        return out_captions, prediction
-
-    def get_useable_captions(self, captions):
+    def get_useable_captions(self, caption):
         """
         returns captions that can be fed to an image captioner (sequences of ids)
         in_captions are prepended by a sos token, while out_captions are the full sequence.
@@ -159,54 +273,73 @@ class Evaluator:
         :param captions:
         :return:
         """
-        in_captions = np.zeros((self.batch_size, self.L))
-        out_captions = np.zeros((self.batch_size, self.L))
+        tokens = caption.translate(str.maketrans('', '', string.punctuation))
+        tokens = tokens.lower().split()
+        return self.V.tokens_to_ids(self.L, tokens)
 
-        for i, caption in enumerate(captions):
-            # Randomly select caption to use
-            chosen_caption = caption[np.random.randint(5)]
-            tokens = chosen_caption.translate(str.maketrans('', '', string.punctuation))
-            tokens = tokens.lower().split()
-            out_captions[i] = self.V.tokens_to_ids(self.L, tokens)
-            in_captions[i] = np.roll(out_captions[i], 1)
-            in_captions[i][0] = self.V.sos_id
-
-        return in_captions, out_captions
-
-    def update_count(self, category, sentences, predicted=True):
+    def update_count(self, category, caption_batches, predicted=True):
         word_counter = self.generated_word_counter if predicted else self.annotation_word_counter
-        for s in sentences:
-            for id in s:
-                tok = self.V.get_token(id)
-                if tok in ["</s>","a","the","on","of","in","with","and","is","are","to","an","at","it"]:
-                    continue
+        # Over batches
+        for captions in caption_batches:
+            # Over possible captions
+            for caption in captions:
+                # Tokens in captions
+                for tok_id in caption:
+                    tok = self.V.get_token(tok_id)
+                    if category == "all":
+                        word_counter[tok] = word_counter.get(tok, 0) + 1
+                    else:
+                        word_counter[category] = word_counter.get(category, {})
+                        word_counter[category][tok] = word_counter[category].get(tok, 0) + 1
+                    if tok_id == self.V.eos_id:
+                        break
 
-                word_counter[category] = word_counter.get(category, {})
-                word_counter[category][tok] = word_counter[category].get(tok, 0) + 1
-
-    def get_statistics(self):
+    def get_statistics(self, qualitative=False):
         stats = {}
-        for cat in self.generated_word_counter:
-            stats[cat] = {"generated": {}, "annotations": {}}
-            gen_c = Counter(self.generated_word_counter[cat])
-            ann_c = Counter(self.annotation_word_counter[cat])
+        stats["corpus_size"] = np.sum(list(self.annotation_word_counter.values()))
+        stats["vocab_size"] =  len(self.annotation_word_counter)
+        stats["perplexity"] = self._perplexity(stats["corpus_size"])
+        stats["BLEU"] = {
+            1: np.mean(self.bleu_scores[1]),
+            2: np.mean(self.bleu_scores[2]),
+            3: np.mean(self.bleu_scores[3]),
+            4: np.mean(self.bleu_scores[4])
+        }
+        stats["BLEU"]["all"] = np.mean(list(stats["BLEU"].values()))
+        stats["omission"] = np.mean(self.omission_scores)
+        stats["KL_Divergence"] = self._KL_divergence(list(self.annotation_word_counter.values()),
+                                                     list(self.generated_word_counter.values()))
+        stats["accuracy"] = np.mean(self.accuracy)
+        stats["average len"] = np.mean(self.lengths)
 
-            for key, counter in zip(["generated", "annotations"], [gen_c, ann_c]):
-                stats[cat][key]["top10"] = counter.most_common(10)
-                stats[cat][key]["tokens_used"] = len(counter)
+        print(stats)
 
-            print("========== {} ==========".format(cat))
-            print("The annotations contain {} unique words, the agent generated {} unique words"
-                  .format(stats[cat]["annotations"]["tokens_used"], stats[cat]["generated"]["tokens_used"]))
-            print("The top 10 most frequently used works for images containing {} are:".format(cat))
-            for i in range(10):
-                g, gc = stats[cat]["generated"]["top10"][i]
-                a, ac = stats[cat]["annotations"]["top10"][i]
-                print("Annotations: {} used {} times, Generated: {} used {} times".format(a, ac, g, gc))
-
+        # for cat in self.generated_word_counter:
+        #     if qualitative:
+        #         stats[cat] = {"generated": {}, "annotations": {}}
+        #         gen_c = Counter(self.generated_word_counter[cat])
+        #         ann_c = Counter(self.annotation_word_counter[cat])
+        #
+        #         for key, counter in zip(["generated", "annotations"], [gen_c, ann_c]):
+        #             stats[cat][key]["top10"] = counter.most_common(10)
+        #             stats[cat][key]["tokens_used"] = len(counter)
+        #
+        #         print("========== {} ==========".format(cat))
+        #         print("The annotations contain {} unique words, the agent generated {} unique words"
+        #               .format(stats[cat]["annotations"]["tokens_used"], stats[cat]["generated"]["tokens_used"]))
+        #         print("The top 10 most frequently used works for images containing {} are:".format(cat))
+        #         for i in range(10):
+        #             g, gc = stats[cat]["generated"]["top10"][i]
+        #             a, ac = stats[cat]["annotations"]["top10"][i]
+        #             print("Annotations: {} used {} times, Generated: {} used {} times".format(a, ac, g, gc))
+        return stats
 
 if __name__ == "__main__":
-    load_key = "b4213146f7a445bf9b3e15730a9f7743"
+
+
+
+
+    load_key = "5eb36dc29f1947cfb7b412518614d77a" #""9dfc5e42bae84c7689708e3631b3c630"
 
     Agent.set_params(K=10000, D=1, L=15, batch_size=128, train=False, loss_type='pairwise')
 
@@ -220,6 +353,7 @@ if __name__ == "__main__":
         variables_to_initialize = [v for v in tf.global_variables() if v not in dont_initialize]
         Agent.sess.run(tf.variables_initializer(variables_to_initialize))
         e = Evaluator(ic, is_)
+
         e.run()
         e.get_statistics()
 

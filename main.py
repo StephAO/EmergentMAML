@@ -6,6 +6,7 @@ import argparse as ap
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
+import time
 
 def converged(losses, precision=0.0001, prev_n=3):
     """
@@ -28,15 +29,15 @@ def save_models(exp_key):
     SenderAgent.save_model(exp_key)
     ReceiverAgent.save_model(exp_key)
 
-def main(epochs=10000, task="reptile", D=31, K=10000, L=15, loss_type='pairwise'):
+def main(epochs=10000, task="rg", D=31, K=10000, L=15, loss_type='pairwise'):
     """
     Run epochs of games
     :return:
     """
-    load_key=None
+    load_key="5eb36dc29f1947cfb7b412518614d77a"
     track_results=True
 
-    Agent.set_params(K=K, D=D, L=L, loss_type=loss_type)
+    Agent.set_params(K=K, D=D, L=L, loss_type=loss_type, train=True)
     dh = Data_Handler(batch_size=Agent.batch_size, group=False)
 
     with tf.variable_scope("all", reuse=tf.AUTO_REUSE):
@@ -71,6 +72,7 @@ def main(epochs=10000, task="reptile", D=31, K=10000, L=15, loss_type='pairwise'
 
         exp_key = t.get_experiment_key()
         losses = []
+        best_accuracy = 0.0
 
         # Starting point
         if not isinstance(t, Reptile):
@@ -93,7 +95,10 @@ def main(epochs=10000, task="reptile", D=31, K=10000, L=15, loss_type='pairwise'
                 if val_accuracy == 1.0 or converged(losses):
                     break
 
-            save_models(exp_key)
+                if val_accuracy > best_accuracy:
+                    print("Saving Model")
+                    best_accuracy = val_accuracy
+                    save_models(exp_key)
 
         Agent.sess.close()
 

@@ -9,16 +9,17 @@ class ImageCaptioner(SenderAgent):
         """ 
         Build self's starting state using the pre-trained cnn on imagenet 
         """
-        self.in_captions = tf.placeholder(tf.int32, shape=(self.batch_size, self.L))
+        self.in_captions = tf.placeholder(tf.int32, shape=(self.batch_size, None))
+        self.seq_len = tf.placeholder(tf.int32, shape=())
         self.out_captions = tf.placeholder(tf.int32, shape=(self.batch_size, self.L))
 
         super()._build_input()
          # (tf.one_hot(self.in_captions, self.K)
-        if Agent.train:
-            self.capt_embeddings = tf.nn.embedding_lookup(SenderAgent.embedding, self.in_captions)
-            self.input = self.capt_embeddings #tf.concat((self.capt_embeddings, self.L_pre_feat), axis=2)
-            self.helper = tf.contrib.seq2seq.TrainingHelper(self.input, [self.L]*self.batch_size)
-    
+        # if Agent.train:
+        self.capt_embeddings = tf.nn.embedding_lookup(SenderAgent.embedding, self.in_captions)
+        self.input = self.capt_embeddings #tf.concat((self.capt_embeddings, self.L_pre_feat), axis=2)
+        self.helper = tf.contrib.seq2seq.TrainingHelper(self.input, tf.fill([self.batch_size], self.seq_len))
+
     def _build_losses(self):
         """ 
         Build this agent's loss function
@@ -54,8 +55,11 @@ class ImageCaptioner(SenderAgent):
     def get_train_ops(self):
         return [self.train_op]
 
-    def fill_feed_dict(self, feed_dict, target_image, in_captions, out_captions):
+    def fill_feed_dict(self, feed_dict, target_image, in_captions, out_captions, seq_len=None):
         feed_dict[self.target_image] = target_image
-        feed_dict[self.out_captions] = out_captions
+        feed_dict[self.in_captions] = in_captions
         if Agent.train:
-            feed_dict[self.in_captions] = in_captions
+            feed_dict[self.out_captions] = out_captions
+            feed_dict[self.seq_len] = Agent.L
+        else:
+            feed_dict[self.seq_len] = seq_len

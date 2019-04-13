@@ -6,8 +6,8 @@ import pickle
 import tensorflow as tf
 
 # TODO: consider moving this to a better spot
-coco_path = '/h/stephaneao/cocoapi'
-project_path = '/h/stephaneao/EmergentMAML'
+coco_path = '/home/stephane/cocoapi'
+project_path = '/home/stephane/PycharmProjects/EmergentMAML'
 
 class Data_Handler:
 
@@ -165,6 +165,7 @@ class Data_Handler:
     def generate_all_encodings(self):
 
         #  Shared CNN pre-trained on imagenet, see https://github.com/keras-team/keras-applications for other options
+
         pre_trained = tf.keras.applications.inception_v3.InceptionV3(include_top=False, weights='imagenet',
                                                                      pooling='max',
                                                                      input_shape=(299, 299, 3))
@@ -176,15 +177,19 @@ class Data_Handler:
 
         img_ph = tf.placeholder(tf.float32)
         img_feats = pre_trained(img_ph)
-        sess = tf.Session()
+        sess = tf.keras.backend.get_session()#tf.Session()
 
-        sess.run(tf.variables_initializer(tf.global_variables()))
+        # sess.run(tf.variables_initializer(tf.global_variables()))
 
         count = 0
 
         img_list = list(self.coco.getImgIds())
 
+        batch_feat = []
+        batch_img = []
+
         for img_id in img_list:
+            print(img_id)
             img = self.coco.loadImgs(img_id)[0]
             img_fn = img['file_name']
             img_path = '{}/images/{}/{}'.format(self.coco_path, self.data_dir, img_fn)
@@ -204,8 +209,21 @@ class Data_Handler:
             img *= 2.
 
             img_feat = sess.run([img_feats], feed_dict={img_ph: img})
+            print(img_feat[0].shape)
+            print(img_feat[0][0][:20])
+            exit(0)
+
+            batch_feat.append(img_feat)
+            batch_img.append(img)
+            if len(batch_img) >= 128:
+                print("-------")
+                print(np.mean(batch_img), np.std(batch_img))
+                print(np.mean(batch_feat), np.std(batch_feat))
+                batch_feat = []
+                batch_img = []
 
             img_feat = np.squeeze(img_feat)
+
 
             with open('{}/images/{}/{}'.format(self.coco_path, self.feat_dir, img_fn), "wb") as f:
                 pickle.dump(img_feat, f)

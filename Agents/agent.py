@@ -48,6 +48,7 @@ class Agent(object):
 
     # OTHER
     epsilon = 1e-12
+    beam_width = 3
 
     # Debugging so that OOM error happens on the line it is created instead of always on the session.run() call
     gpu_options = tf.GPUOptions(allow_growth=True)
@@ -73,7 +74,7 @@ class Agent(object):
         Agent.L = L or Agent.L
         Agent.D = D or Agent.D
         Agent.lr = lr or Agent.lr
-        Agent.train = train or Agent.train
+        Agent.train = train if train is not None else Agent.train
         Agent.loss_type = loss_type or Agent.loss_type
         Agent.batch_size = batch_size or Agent.batch_size
         Agent.num_hidden = num_hidden or Agent.num_hidden
@@ -157,6 +158,7 @@ class Agent(object):
         # Build model
         self._build_input()
         self._build_output()
+        # if Agent.train:
         self._build_losses()
         self._build_optimizer()
 

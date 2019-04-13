@@ -30,6 +30,10 @@ class ImageCaptioning(Task):
         self.agents[0].fill_feed_dict(fd, images, in_captions, out_captions)
         accuracy, loss, prediction = self.run_game(fd, mode=mode)
 
+        # print("---")
+        # print(captions[0][0])
+        # print(self.V.ids_to_tokens(prediction[0]))
+
         return accuracy, loss
 
     def get_useable_captions(self, captions):

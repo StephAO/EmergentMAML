@@ -123,7 +123,7 @@ class Vocabulary:
 
         return ids
     
-    def ids_to_tokens(self, ids):
+    def ids_to_tokens(self, ids, filter_eos=False):
         """
         Map a sequence of ids to tokens
         """
@@ -131,6 +131,8 @@ class Vocabulary:
         tokens = []
         for id in ids:
             tokens.append(self.get_token(id))
+            if filter_eos and id == self.eos_id:
+                break
         return ' '.join(tokens)
     
 if __name__ == "__main__":
