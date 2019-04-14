@@ -25,7 +25,7 @@ class Evaluator:
         self.L = Agent.L
         # Word counters
         self.generated_word_counter = {}
-        self.annotation_word_counter = {}
+        self.caption_word_counter = {}
         self.omission_scores = []
         self.bleu_scores = {ngram: [] for ngram in [1,2,3,4] }
         
@@ -38,7 +38,7 @@ class Evaluator:
         # initialize COCO api for image and instance annotations
         self.coco = COCO(self.data_file)
         self.coco_capts = COCO(self.caption_file)
-        self.cat_ids = self.coco.getCatIds()
+        self.cats = self.coco.loadCats(self.coco.getCatIds())
 
     def print_progress(self, generated, total):
         print("\r[{0:5.2f}%]".format(float(generated) / float(total) * 100), end="")
@@ -52,15 +52,13 @@ class Evaluator:
         :param mode[str]: "train" or "val" for training or validation set
         :return: a list of images, optionally a list of captions
         """
-
-        # for cat_id in self.cat_ids:
-        #     cat_imgs = self.coco.getImgIds(catIds=cat_id)
-        #     total += len(cat_imgs)
-
-        all_img_ids = self.coco.getImgIds()
-        np.random.shuffle(all_img_ids)
-        all_img_ids = all_img_ids[:10000]
-        generated = 0
+        img_ids = []
+        all_ids = self.coco.getImgIds()
+        for cat in self.cats:
+            cat_imgs = self.coco.getImgIds(catIds=cat["id"])
+            cat_name = [cat["name"]] * 200
+            # print(list(zip(cat_imgs[:20], cat_name)))
+            img_ids.extend(zip(cat_imgs[:200], cat_name))
 
         self.corpus_log_probability = 1.0
         self.accuracy = []
@@ -77,7 +75,8 @@ class Evaluator:
         img_count = 0
         img_batches = np.zeros((self.batch_size, 2048), dtype=np.float32)
         cap_batches = []
-        for img_id in tqdm(all_img_ids):
+        cat_names = []
+        for img_id, cat_name in tqdm(img_ids):
             img = self.coco.loadImgs(img_id)[0]
             with open('{}/images/{}/{}'.format(self.coco_path, self.feat_dir, img['file_name']), "rb") as f:
                 img = pickle.load(f)
@@ -90,19 +89,19 @@ class Evaluator:
             for a in anns:
                 img_captions.append(self.get_useable_captions(a['caption']))
             cap_batches.append(img_captions)
+            cat_names.append(cat_name)
 
             img_count += 1
 
             if img_count >= self.batch_size:
                 predictions, probabilities = self.run_batch((img_batches, cap_batches))
-                # self.update_count(cat["name"], cap_batches, predicted=False)
-                # self.update_count(cat["name"], [predictions], predicted=True)
-                self.update_count("all", cap_batches, predicted=False)
-                self.update_count("all", [predictions], predicted=True)
+                print(np.expand_dims(predictions, axis=1).shape)
+                self.update_count(cat_names, cap_batches, predicted=False)
+                self.update_count(cat_names, np.expand_dims(predictions, axis=1), predicted=True)
 
                 candidates = np.zeros((Agent.D + 1, Agent.batch_size, 2048))
                 candidates[0, :] = img_batches
-                distractor_ids = np.random.choice(all_img_ids, Agent.D * Agent.batch_size, replace=False)
+                distractor_ids = np.random.choice(all_ids, Agent.D * Agent.batch_size, replace=False)
                 distractor_imgs = self.coco.loadImgs(distractor_ids)
                 for d in range(Agent.D):
                     for bs in range(Agent.batch_size):
@@ -117,8 +116,7 @@ class Evaluator:
 
                 img_count = 0
                 cap_batches = []
-
-                generated += self.batch_size
+                cat_names = []
 
     def _calculate_bleu_score(self, pred_ids, true_caps_ids):
         pred_toks = []
@@ -191,17 +189,28 @@ class Evaluator:
         return np.power(2.0, -(self.corpus_log_probability / corpus_size))
 
     def _KL_divergence(self, caption_word_counts, generated_word_counts):
-        caption_word_counts.sort()
-        generated_word_counts.sort()
-        P = np.array(generated_word_counts) / float(np.sum(generated_word_counts))
-        Q = np.array(caption_word_counts) / float(np.sum(caption_word_counts))
-        print(len(caption_word_counts), len(generated_word_counts))
+        P = []
+        Q = []
+        for word, count in caption_word_counts.items():
+            P.append(float(generated_word_counts.get(word, 0)))
+            Q.append(float(count))
+
+        P = np.array(P) / np.sum(P)
+        Q = np.array(Q) / np.sum(Q)
         sum = 0.0
-        for i in range(len(caption_word_counts)):
-            if i >= len(generated_word_counts):
-                break
+        for i in range(len(P)):
+            if P[i] == 0:
+                continue
             sum += P[i] * np.log(P[i] / Q[i])
         return sum
+
+    def get_KL_divergence(self):
+        all = self._KL_divergence(self.caption_word_counter["all"], self.generated_word_counter["all"])
+        per_category = []
+        for cat in self.cats:
+            kl = self._KL_divergence(self.caption_word_counter[cat["name"]], self.generated_word_counter[cat["name"]])
+            per_category.append(kl)
+        return all, np.mean(per_category)
 
     def beam_search(self, images, captions, beam_width=3):
         # BEAM SEARCH
@@ -277,27 +286,27 @@ class Evaluator:
         tokens = tokens.lower().split()
         return self.V.tokens_to_ids(self.L, tokens)
 
-    def update_count(self, category, caption_batches, predicted=True):
-        word_counter = self.generated_word_counter if predicted else self.annotation_word_counter
+    def update_count(self, categories, caption_batches, predicted=True):
+        word_counter = self.generated_word_counter if predicted else self.caption_word_counter
         # Over batches
-        for captions in caption_batches:
+        for i, captions in enumerate(caption_batches):
+            category = categories[i]
             # Over possible captions
             for caption in captions:
                 # Tokens in captions
                 for tok_id in caption:
                     tok = self.V.get_token(tok_id)
-                    if category == "all":
-                        word_counter[tok] = word_counter.get(tok, 0) + 1
-                    else:
-                        word_counter[category] = word_counter.get(category, {})
-                        word_counter[category][tok] = word_counter[category].get(tok, 0) + 1
+                    word_counter[category] = word_counter.get(category, {})
+                    word_counter[category][tok] = word_counter[category].get(tok, 0) + 1
+                    word_counter["all"] = word_counter.get("all", {})
+                    word_counter["all"][tok] = word_counter["all"].get(tok, 0) + 1
                     if tok_id == self.V.eos_id:
                         break
 
     def get_statistics(self, qualitative=False):
         stats = {}
-        stats["corpus_size"] = np.sum(list(self.annotation_word_counter.values()))
-        stats["vocab_size"] =  len(self.annotation_word_counter)
+        stats["corpus_size"] = np.sum(list(self.caption_word_counter["all"].values()))
+        stats["vocab_size"] =  len(self.generated_word_counter)
         stats["perplexity"] = self._perplexity(stats["corpus_size"])
         stats["BLEU"] = {
             1: np.mean(self.bleu_scores[1]),
@@ -307,8 +316,7 @@ class Evaluator:
         }
         stats["BLEU"]["all"] = np.mean(list(stats["BLEU"].values()))
         stats["omission"] = np.mean(self.omission_scores)
-        stats["KL_Divergence"] = self._KL_divergence(list(self.annotation_word_counter.values()),
-                                                     list(self.generated_word_counter.values()))
+        stats["KL_Divergence"] = self.get_KL_divergence()
         stats["accuracy"] = np.mean(self.accuracy)
         stats["average len"] = np.mean(self.lengths)
 
@@ -339,7 +347,7 @@ if __name__ == "__main__":
 
 
 
-    load_key = "5eb36dc29f1947cfb7b412518614d77a" #""9dfc5e42bae84c7689708e3631b3c630"
+    load_key = "7e989143b2d94b2ba262496c203f7836" #""9dfc5e42bae84c7689708e3631b3c630"
 
     Agent.set_params(K=10000, D=1, L=15, batch_size=128, train=False, loss_type='pairwise')
 
