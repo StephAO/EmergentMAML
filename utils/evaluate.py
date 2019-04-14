@@ -210,7 +210,7 @@ class Evaluator:
         for cat in self.cats:
             kl = self._KL_divergence(self.caption_word_counter[cat["name"]], self.generated_word_counter[cat["name"]])
             per_category.append(kl)
-        return all, np.mean(per_category)
+        return all, np.mean(per_category), np.std(per_category)
 
     def beam_search(self, images, captions, beam_width=3):
         # BEAM SEARCH
