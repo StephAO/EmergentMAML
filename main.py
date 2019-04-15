@@ -29,7 +29,7 @@ def save_models(exp_key):
     SenderAgent.save_model(exp_key)
     ReceiverAgent.save_model(exp_key)
 
-def main(epochs=10000, task="rg", D=31, K=10000, L=15, loss_type='pairwise'):
+def main(epochs=1, task="rg", D=31, K=10000, L=15, loss_type='pairwise'):
     """
     Run epochs of games
     :return:
@@ -83,7 +83,7 @@ def main(epochs=10000, task="rg", D=31, K=10000, L=15, loss_type='pairwise'):
         # Start training
         for e in range(1, epochs + 1):
             print("Training epoch {0}".format(e))
-            train_accuracy, train_loss = t.train_epoch(e, mode="train")
+            train_accuracy, train_loss = t.train_epoch(e, mode="receiver_train")
             print("\rloss: {0:1.4f}, accuracy: {1:5.2f}%".format(train_loss, train_accuracy * 100), end="\n")
             if not isinstance(t, Reptile):
                 print("Validating epoch {0}".format(e))

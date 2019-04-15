@@ -100,7 +100,7 @@ class Data_Handler:
         :param mode[str]: "train" or "val" for training or validation set
         :return: a list of images, optionally a list of captions
         """
-        data = self.train if mode == "train" else self.val
+        data = self.train if mode[-5:] == "train" else self.val
         generated = 0
         total = 0
         if self.group:

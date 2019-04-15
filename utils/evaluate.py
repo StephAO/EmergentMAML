@@ -40,9 +40,6 @@ class Evaluator:
         self.coco_capts = COCO(self.caption_file)
         self.cats = self.coco.loadCats(self.coco.getCatIds())
 
-    def print_progress(self, generated, total):
-        print("\r[{0:5.2f}%]".format(float(generated) / float(total) * 100), end="")
-
     def run(self):
         """
         Return batches of images from the MSCOCO dataset and their respective captions if "captions" is True
@@ -57,7 +54,6 @@ class Evaluator:
         for cat in self.cats:
             cat_imgs = self.coco.getImgIds(catIds=cat["id"])
             cat_name = [cat["name"]] * 200
-            # print(list(zip(cat_imgs[:20], cat_name)))
             img_ids.extend(zip(cat_imgs[:200], cat_name))
 
         self.corpus_log_probability = 1.0
@@ -95,7 +91,6 @@ class Evaluator:
 
             if img_count >= self.batch_size:
                 predictions, probabilities = self.run_batch((img_batches, cap_batches))
-                print(np.expand_dims(predictions, axis=1).shape)
                 self.update_count(cat_names, cap_batches, predicted=False)
                 self.update_count(cat_names, np.expand_dims(predictions, axis=1), predicted=True)
 
@@ -151,6 +146,7 @@ class Evaluator:
         target_indices = np.zeros(self.batch_size, dtype=np.int32)
         self.is_.fill_feed_dict(fd, orig_messages, candidates, target_indices)
         probs, pred = Agent.sess.run([self.is_.prob_dist, self.is_.prediction], feed_dict=fd)
+        print(pred)
         orig_probs = probs[np.arange(self.batch_size),target_indices]
         orig_probs = orig_probs.reshape((Agent.batch_size, 1))
         accuracy = (Agent.batch_size - np.count_nonzero(pred)) / Agent.batch_size
@@ -191,9 +187,11 @@ class Evaluator:
     def _KL_divergence(self, caption_word_counts, generated_word_counts):
         P = []
         Q = []
+        words = []
         for word, count in caption_word_counts.items():
             P.append(float(generated_word_counts.get(word, 0)))
             Q.append(float(count))
+            words.append(word)
 
         P = np.array(P) / np.sum(P)
         Q = np.array(Q) / np.sum(Q)
@@ -202,15 +200,43 @@ class Evaluator:
             if P[i] == 0:
                 continue
             sum += P[i] * np.log(P[i] / Q[i])
-        return sum
+        return sum, P, Q, words
+
+    def write_distribution(self, d):
+        with open(project_path + "/data/distribution_{}.csv".format(d["name"]), "w+") as f:
+            f.write("word,P,Q,kl={}\n".format(d['kl']))
+            for i in range(len(d['Q'])):
+                f.write("{},{},{}\n".format(d['words'][i],d['P'][i], d['Q'][i]))
+
 
     def get_KL_divergence(self):
-        all = self._KL_divergence(self.caption_word_counter["all"], self.generated_word_counter["all"])
+        all_kl, all_P, all_Q, all_words = self._KL_divergence(self.caption_word_counter["all"], self.generated_word_counter["all"])
         per_category = []
+        all = {'kl': all_kl, 'P': all_P, 'Q': all_Q, 'name': "all", 'words': all_words}
+        best = {'kl': 999999, 'P': None, 'Q': None, 'name': None, 'words': None}
+        worst = {'kl': 0, 'P': None, 'Q': None, 'name': None, 'words': None}
+
         for cat in self.cats:
-            kl = self._KL_divergence(self.caption_word_counter[cat["name"]], self.generated_word_counter[cat["name"]])
+            kl, P, Q, words = self._KL_divergence(self.caption_word_counter[cat["name"]], self.generated_word_counter[cat["name"]])
             per_category.append(kl)
-        return all, np.mean(per_category), np.std(per_category)
+            if kl < best['kl']:
+                best['kl'] = kl
+                best['P'] = P
+                best['Q'] = Q
+                best['name'] = cat["name"]
+                best['words'] = words
+            if kl > worst['kl']:
+                worst['kl'] = kl
+                worst['P'] = P
+                worst['Q'] = Q
+                worst['name'] = cat["name"]
+                worst['words'] = words
+
+        self.write_distribution(all)
+        self.write_distribution(best)
+        self.write_distribution(worst)
+
+        return all_kl, np.mean(per_category), np.std(per_category)
 
     def beam_search(self, images, captions, beam_width=3):
         # BEAM SEARCH
@@ -306,7 +332,7 @@ class Evaluator:
     def get_statistics(self, qualitative=False):
         stats = {}
         stats["corpus_size"] = np.sum(list(self.caption_word_counter["all"].values()))
-        stats["vocab_size"] =  len(self.generated_word_counter)
+        stats["vocab_size"] =  len(self.generated_word_counter["all"])
         stats["perplexity"] = self._perplexity(stats["corpus_size"])
         stats["BLEU"] = {
             1: np.mean(self.bleu_scores[1]),
@@ -347,9 +373,9 @@ if __name__ == "__main__":
 
 
 
-    load_key = "7e989143b2d94b2ba262496c203f7836" #""9dfc5e42bae84c7689708e3631b3c630"
+    load_key = "47c879fd1cb042b4a1eca6b32f3999e2" #""9dfc5e42bae84c7689708e3631b3c630"
 
-    Agent.set_params(K=10000, D=1, L=15, batch_size=128, train=False, loss_type='pairwise')
+    Agent.set_params(K=10000, D=31, L=15, batch_size=128, train=False, loss_type='pairwise')
 
     with tf.variable_scope("all", reuse=tf.AUTO_REUSE):
         ic = ImageCaptioner(load_key=load_key)

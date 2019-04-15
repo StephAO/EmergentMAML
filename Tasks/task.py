@@ -1,6 +1,7 @@
 from comet_ml import Experiment
 import numpy as np
 from Agents.agent import Agent
+from utils.data_handler import project_path
 
 class Task(object):
     """
@@ -60,6 +61,12 @@ class Task(object):
                 accuracies.append(acc)
             except StopIteration:
                 break
+
+        if mode[-5:]=="train":
+            with open(project_path + "/data/specialization_{}.csv".format(self.experiment.get_key()),"w+") as f:
+                f.write(str("loss,accuracy\n"))
+                for i in range(len(losses)):
+                    f.write("{},{}\n".format(losses[i], accuracies[i]))
 
         avg_acc, avg_loss  = np.mean(accuracies), np.mean(losses)
         if self.track_results:
