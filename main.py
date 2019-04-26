@@ -29,16 +29,16 @@ def save_models(exp_key):
     SenderAgent.save_model(exp_key)
     ReceiverAgent.save_model(exp_key)
 
-def main(epochs=1, task="rg", D=31, K=10000, L=15, loss_type='pairwise'):
+def main(epochs=100, task="reptile", D=31, K=10000, L=15, loss_type='pairwise'):
     """
     Run epochs of games
     :return:
     """
-    load_key="5eb36dc29f1947cfb7b412518614d77a"
+    load_key=None
     track_results=True
 
     Agent.set_params(K=K, D=D, L=L, loss_type=loss_type, train=True)
-    dh = Data_Handler(batch_size=Agent.batch_size, group=False)
+    dh = Data_Handler(batch_size=Agent.batch_size, same_category=True)
 
     with tf.variable_scope("all", reuse=tf.AUTO_REUSE):
         # Set up Agents and Tasks
@@ -46,14 +46,14 @@ def main(epochs=1, task="rg", D=31, K=10000, L=15, loss_type='pairwise'):
             s = SenderAgent(load_key=load_key)
             r = ReceiverAgent(*s.get_output(), load_key=load_key)
             t = ReferentialGame(s, r, data_handler=dh, track_results=track_results)
-            dh.set_params(images_per_instance=D + 1)
+            dh.set_params(distractors=D )
         elif task.lower() in ["ic", "image captioning", "image_captioning", "imagecaptioning"]:
             ic = ImageCaptioner(load_key=load_key)
             t = ImageCaptioning(ic, data_handler=dh, track_results=track_results)
         elif task.lower() in ["is", "image selection", "image_selection", "imageselection"]:
             is_ = ImageSelector(load_key=load_key)
             t = ImageSelection(is_, data_handler=dh, track_results=track_results)
-            dh.set_params(images_per_instance=D + 1)
+            dh.set_params(distractors=D)
         elif task.lower() in ["r", "reptile"]:
             t = Reptile(data_handler=dh, track_results=track_results)
         else:
@@ -83,7 +83,7 @@ def main(epochs=1, task="rg", D=31, K=10000, L=15, loss_type='pairwise'):
         # Start training
         for e in range(1, epochs + 1):
             print("Training epoch {0}".format(e))
-            train_accuracy, train_loss = t.train_epoch(e, mode="receiver_train")
+            train_accuracy, train_loss = t.train_epoch(e, mode="train")
             print("\rloss: {0:1.4f}, accuracy: {1:5.2f}%".format(train_loss, train_accuracy * 100), end="\n")
             if not isinstance(t, Reptile):
                 print("Validating epoch {0}".format(e))

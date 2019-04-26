@@ -25,7 +25,7 @@ class ImageSelection(Task):
         candidates = images
         
         for i, ti in enumerate(target_indices):
-            chosen_caption = captions[i][ti][np.random.randint(5)]
+            chosen_caption = captions[i][np.random.randint(5)]
             # print(chosen_caption)
             tokens = chosen_caption.translate(str.maketrans('', '', string.punctuation))
             tokens = tokens.lower().split()

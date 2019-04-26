@@ -10,7 +10,7 @@ def cosine_similarity(a, b, axis=1):
 
 
 class ReceiverAgent(Agent):
-    rnn_cell = tf.nn.rnn_cell.LSTMCell(Agent.num_hidden)
+    rnn_cell = tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(Agent.num_hidden)
     # Unique RNN cell and fc rnn output layer
     fc = tf.keras.layers.Dense(Agent.num_hidden, activation=tf.nn.tanh)
     layers = [fc]
@@ -174,5 +174,5 @@ class ReceiverAgent(Agent):
         """
         for i, c in enumerate(candidates):
             fd[self.candidates[i]] = c
-        if Agent.train:
-            fd[self.target_indices] = target_idx
+        # if Agent.train:
+        fd[self.target_indices] = target_idx

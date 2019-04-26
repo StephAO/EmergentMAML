@@ -32,7 +32,7 @@ class Agent(object):
     # MODEL PARAMETERS
     freeze_cnn = False
     num_hidden = 512
-    batch_size = 128
+    batch_size = 256
     emb_size = 300
 
     # TRAINING PARAMETERS

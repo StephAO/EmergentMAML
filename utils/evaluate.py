@@ -55,10 +55,13 @@ class Evaluator:
             cat_imgs = self.coco.getImgIds(catIds=cat["id"])
             cat_name = [cat["name"]] * 200
             img_ids.extend(zip(cat_imgs[:200], cat_name))
+            # print("{} & {}".format(cat["name"], len(cat_imgs)))
 
         self.corpus_log_probability = 1.0
         self.accuracy = []
+        self.accuracies = {}
         self.lengths = []
+        self.true_lengths = []
 
         ### Uncomment for qualitative analysis
         # for cat_id in self.cat_ids:
@@ -74,6 +77,7 @@ class Evaluator:
         cat_names = []
         for img_id, cat_name in tqdm(img_ids):
             img = self.coco.loadImgs(img_id)[0]
+
             with open('{}/images/{}/{}'.format(self.coco_path, self.feat_dir, img['file_name']), "rb") as f:
                 img = pickle.load(f)
 
@@ -97,6 +101,7 @@ class Evaluator:
                 candidates = np.zeros((Agent.D + 1, Agent.batch_size, 2048))
                 candidates[0, :] = img_batches
                 distractor_ids = np.random.choice(all_ids, Agent.D * Agent.batch_size, replace=False)
+                print(distractor_ids)
                 distractor_imgs = self.coco.loadImgs(distractor_ids)
                 for d in range(Agent.D):
                     for bs in range(Agent.batch_size):
@@ -105,7 +110,7 @@ class Evaluator:
                             feats = pickle.load(f)
                             candidates[d + 1, bs] = feats
 
-                self._calculate_omission_score(candidates, predictions)
+                self._calculate_omission_score(candidates, predictions, cat_names)
                 self._calculate_bleu_score(predictions, cap_batches)
                 self._update_corpus_probability(probabilities, cap_batches)
 
@@ -123,7 +128,9 @@ class Evaluator:
             # print(pt)
             self.lengths.append(len(pt.split()))
             for tc in true_caps_ids[i]:
-                true_caps_toks[i].append(self.V.ids_to_tokens(tc, filter_eos=True))
+                tt = self.V.ids_to_tokens(tc, filter_eos=True)
+                true_caps_toks[i].append(tt)
+                self.true_lengths.append(len(tt.split()))
 
         # print("-----")
         # print(pred_toks[0])
@@ -132,8 +139,8 @@ class Evaluator:
         for ngram, scores in self.bleu_scores.items():
             scores.append(BLEU.get_score(pred_toks, true_caps_toks, N=ngram))
     
-    def _calculate_omission_score(self, candidates, messages):
-        
+    def _calculate_omission_score(self, candidates, messages, categories):
+
         messages = messages.astype(np.int32)
         
         orig_messages = np.zeros((Agent.batch_size, Agent.L, Agent.K))
@@ -145,11 +152,16 @@ class Evaluator:
         fd = {}
         target_indices = np.zeros(self.batch_size, dtype=np.int32)
         self.is_.fill_feed_dict(fd, orig_messages, candidates, target_indices)
-        probs, pred = Agent.sess.run([self.is_.prob_dist, self.is_.prediction], feed_dict=fd)
-        print(pred)
+        probs, pred, acc = Agent.sess.run([self.is_.prob_dist, self.is_.prediction, self.is_.accuracy], feed_dict=fd)
         orig_probs = probs[np.arange(self.batch_size),target_indices]
         orig_probs = orig_probs.reshape((Agent.batch_size, 1))
         accuracy = (Agent.batch_size - np.count_nonzero(pred)) / Agent.batch_size
+        print(accuracy, acc)
+        for i in range(Agent.batch_size):
+            if self.accuracies.get(categories[i], None) is None:
+                self.accuracies[categories[i]] = []
+            acc = 1 if pred[i] == 0 else 0
+            self.accuracies[categories[i]].append(acc)
         self.accuracy.append(accuracy)
         
         mod_probs = []
@@ -333,6 +345,7 @@ class Evaluator:
         stats = {}
         stats["corpus_size"] = np.sum(list(self.caption_word_counter["all"].values()))
         stats["vocab_size"] =  len(self.generated_word_counter["all"])
+        stats["true_vocab_size"] = len(self.caption_word_counter["all"])
         stats["perplexity"] = self._perplexity(stats["corpus_size"])
         stats["BLEU"] = {
             1: np.mean(self.bleu_scores[1]),
@@ -345,6 +358,14 @@ class Evaluator:
         stats["KL_Divergence"] = self.get_KL_divergence()
         stats["accuracy"] = np.mean(self.accuracy)
         stats["average len"] = np.mean(self.lengths)
+        print(stats)
+
+
+        stats["average_true_len"] = np.mean(self.true_lengths)
+        print(np.mean(self.true_lengths))
+
+        for cat, acc in self.accuracies.items():
+            print("{},{}".format(cat, np.mean(acc)))
 
         print(stats)
 
@@ -371,9 +392,42 @@ class Evaluator:
 if __name__ == "__main__":
 
 
+    # "COCO_train2014_000000499912.jpg"
+    # "a group of people standing in a field </s>"
+    # "a group of young people standing next to each other </s>"
+    # "a group of men playing a game of soccer </s>"
+    # "knacks knacks fruits fruits flowery flowery flowery flowery army claus claus refueling refueling capped soft"
+    #
+    # "COCO_train2014_000000238290.jpg"
+    # "a man riding a skateboard in the air </s>"
+    # "a man flying through the air while riding a snowboard </s>"
+    # "a large airplane flying over a body of water"
+    # "nine nine nine luxury caramel caramel caramel fedora fedora climate climate climate wildebeests wildebeests parade"
+    #
+    #
+    # "COCO_train2014_000000082039.jpg"
+    # "a man riding a skateboard on the snow </s>"
+    # "a man sitting on top of a surfboard on a beach </s>"
+    # "people riding snow boards sitting on a snowy surface </s>"
+    # "steam steam steam steam steam steam steam steam steam lunging lunging bulldog caramel days caramel"
+    #
+    #
+    # "COCO_train2014_000000090350.jpg"
+    # "a group of people standing in a field </s>"
+    # "a cow grazing on a lush green field </s>"
+    # "a couple of white horses standing on top of a lush green field </s>"
+    # "knacks knacks fruits fruits fruits thats flowery flowery flowery starting contrast pig paris paris fog"
+    #
+    # "COCO_train2014_000000426152.jpg"
+    # "a man is standing on a table with a table </s>"
+    # "a man in a suit and tie standing in front of a window </s>"
+    # "a woman is eating and drinking a glass of wine </s>"
+    # "nine soaring soaring soaring soaring army allover springs aircrafts agricultural capitol gelato dusted dusted parent"
 
 
-    load_key = "47c879fd1cb042b4a1eca6b32f3999e2" #""9dfc5e42bae84c7689708e3631b3c630"
+
+
+    load_key = "7e989143b2d94b2ba262496c203f7836" #""9dfc5e42bae84c7689708e3631b3c630"
 
     Agent.set_params(K=10000, D=31, L=15, batch_size=128, train=False, loss_type='pairwise')
 

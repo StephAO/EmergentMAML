@@ -39,6 +39,11 @@ class Reptile(Task):
                                      auto_param_logging=False, auto_metric_logging=False,
                                      disabled=(not track_results))
 
+        self.params = {}
+        self.params.update(Agent.get_params())
+        self.params.update(data_handler.get_params())
+        self.experiment.log_parameters(self.params)
+
         self.T = {}
         if image_captioner:
             self.ic = ImageCaptioning(self.IC, experiment=self.experiment, track_results=False)
@@ -84,6 +89,8 @@ class Reptile(Task):
         with open("{}/data/csv_accuracy_{}.csv".format(project_path, self.experiment.get_key()), 'w+') as csv_acc_file:
             csv_acc_file.write("Image Captioner Loss,Image Selector Loss,Sender Loss,Receiver Loss\n")
 
+        self.step = 0
+
 
     def get_diff(self, a, b):
         diff = 0.
@@ -109,46 +116,54 @@ class Reptile(Task):
                 s.import_variables(new_shared_weights)
 
     def train_epoch(self, e, mode=None):
-        self.experiment.set_step(e)
+        self.dh.set_params(distractors=0)
         image_gen = self.dh.get_images(return_captions=True, mode="train")
         # Get current variables
         start_vars = {k: s.export_variables() for k, s in self.own_states.items()}
         start_vars["shared"] = self.shared_states["shared_sender"].export_variables()
 
-        # Save current variables
-        old_own = {k: s.export_variables() for k, s in self.own_states.items()}
-        new_own = {k: [] for k, s in self.own_states.items()}
-        old_shared = self.shared_states["shared_sender"].export_variables()
-        new_shared = []
+        while True:
+            try:
 
-        # For each task
-        for task in ["Image Captioner", "Image Selector", "Sender", "Receiver"]:
-            # parameter setup to not waste data
-            if task in ["Sender", "Receiver", "Image Selector"]:
-                self.dh.set_params(images_per_instance=Agent.D+1)
-            else:
-                self.dh.set_params(images_per_instance=1)
-            # Run task n times
-            for _ in range(self.N):
-                images, captions = next(image_gen)
-                acc, loss = self.T[task](images, captions)
-            self.train_metrics[task + " Accuracy"] = acc
-            self.train_metrics[task + " Loss"] = loss
+                # Save current variables
+                old_own = {k: s.export_variables() for k, s in self.own_states.items()}
+                new_own = {k: [] for k, s in self.own_states.items()}
+                old_shared = self.shared_states["shared_sender"].export_variables()
+                new_shared = []
 
-            # Store new variables
-            [new_own[k].append(s.export_variables()) for k, s in self.own_states.items()]
-            [new_shared.append(s.export_variables()) for k, s in self.shared_states.items()]
+                # For each task
+                for task in ["Image Captioner", "Image Selector", "Sender", "Receiver"]:
+                    # parameter setup to not waste data
+                    if task in ["Sender", "Receiver", "Image Selector"]:
+                        self.dh.set_params(distractors=Agent.D)
+                    else:
+                        self.dh.set_params(distractors=0)
+                    # Run task n times
+                    for _ in range(self.N):
+                        images, captions = next(image_gen)
+                        acc, loss = self.T[task](images, captions)
+                    self.train_metrics[task + " Accuracy"] = acc
+                    self.train_metrics[task + " Loss"] = loss
 
-            # Reset to old variables for next task
-            [s.import_variables(old_own[k]) for k, s in self.own_states.items()]
-            [s.import_variables(old_shared) for k, s in self.shared_states.items()]
+                    # Store new variables
+                    [new_own[k].append(s.export_variables()) for k, s in self.own_states.items()]
+                    [new_shared.append(s.export_variables()) for k, s in self.shared_states.items()]
 
-        self.experiment.log_metrics(self.train_metrics)
-        # Average new variables
-        new_own = {k: interpolate_vars(old_own[k], average_vars(new_own[k]), 0.1) for k, s in self.own_states.items()}
-        new_shared = interpolate_vars(old_shared, average_vars(new_shared), 0.1)
-        # Set variables to new variables
-        self.set_weights(new_own_weights=new_own, new_shared_weights=new_shared)
+                    # Reset to old variables for next task
+                    [s.import_variables(old_own[k]) for k, s in self.own_states.items()]
+                    [s.import_variables(old_shared) for k, s in self.shared_states.items()]
+
+                self.step += 1
+                self.experiment.set_step(self.step)
+                self.experiment.log_metrics(self.train_metrics)
+                # Average new variables
+                new_own = {k: interpolate_vars(old_own[k], average_vars(new_own[k]), 0.1) for k, s in self.own_states.items()}
+                new_shared = interpolate_vars(old_shared, average_vars(new_shared), 0.1)
+                # Set variables to new variables
+                self.set_weights(new_own_weights=new_own, new_shared_weights=new_shared)
+
+            except StopIteration:
+                break
 
         # Get change in weights
         end_vars = {k: s.export_variables() for k, s in self.own_states.items()}

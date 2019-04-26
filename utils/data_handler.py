@@ -6,15 +6,14 @@ import pickle
 import tensorflow as tf
 
 # TODO: consider moving this to a better spot
-coco_path = '/home/stephane/cocoapi'
-project_path = '/home/stephane/PycharmProjects/EmergentMAML'
+coco_path = '/h/stephaneao/cocoapi'
+project_path = '/h/stephaneao/EmergentMAML'
 
 class Data_Handler:
 
-    def __init__(self, images_per_instance=1, batch_size=1, group=True):
-        self.images_per_instance = images_per_instance
+    def __init__(self, num_distractors=0, batch_size=1, same_category=True):
+        self.num_distractors = num_distractors
         self.batch_size = batch_size
-        self.images_per_batch = self.images_per_instance * self.batch_size
         self.coco_path = coco_path
         self.feat_dir = 'train_feats'
         self.data_dir = 'train2014'
@@ -29,7 +28,7 @@ class Data_Handler:
         self.cat_ids = self.coco.getCatIds()
 
         self.train_split = 0.90
-        self.group = group
+        self.same_category = same_category
         self.split_train_val()
 
     def get_params(self):
@@ -38,58 +37,49 @@ class Data_Handler:
         """
         params = {
             "train_split": self.train_split,
-            "grouping" : self.group,
+            "grouping" : self.same_category,
         }
 
         return params
 
     def split_train_val(self):
         all_img_ids = self.coco.getImgIds()
+        np.random.seed(12345)
         np.random.shuffle(all_img_ids)
+        self.all_imgs = {"train": [], "val": []}
+        self.all_imgs_ids = {"train": [], "val": []}
 
-        # No grouping when selecting distractors
-        if not self.group:
-            # Split images into train/val
-            split_idx = int(len(all_img_ids) * self.train_split)
-            self.train = all_img_ids[:split_idx]
-            self.val = all_img_ids[split_idx:]
-            return
+        # All images
+        # Split images into train/val
+        split_idx = int(len(all_img_ids) * self.train_split)
 
         # Each set of images is grouped in a way (usually where each has a different category)
-        self.all = {}
-        self.train = {}
-        self.val = {}
 
-        for img_id in all_img_ids:
+        self.distractors_cat = {"train": {}, "val": {}}
+
+        for i, img_id in enumerate(all_img_ids):
+            mode = "train" if i < split_idx else "val"
             ann_id = self.coco.getAnnIds(img_id)
             anns = self.coco.loadAnns(ann_id)
 
-            # Find category to place img in
-            # Currently using category that takes up the most space in the image
-            possible_categories = {}
-            if len(anns) == 0:  # If image has not category, place in "other" category bin
-                possible_categories[-1] = 1.
-            for i in range(len(anns)):
-                entity_id = anns[i]['category_id']
-                possible_categories[entity_id] = possible_categories.get(entity_id, 0.0) + anns[i]['area']
-            category = max(possible_categories, key=lambda key: possible_categories[key])
-            if not category in self.all:
-                self.all[category] = []
-            self.all[category].append(img_id)
+            categories = []
+            for a in anns:
+                cat_id = a['category_id']
+                categories.append(cat_id)
+                if cat_id not in self.distractors_cat[mode]:
+                    self.distractors_cat[mode][cat_id] = []
+                self.distractors_cat[mode][cat_id].append(img_id)
+            if len(categories) == 0:
+                if -1 not in self.distractors_cat[mode]:
+                    self.distractors_cat[mode][-1] = []
+                self.distractors_cat[mode][-1].append(img_id)
 
-        # Split images into train/val
-        for cat, imgs in self.all.items():
-            split_idx = int(len(imgs) * self.train_split)
-            self.train[cat] = self.all[cat][:split_idx]
-            self.val[cat] = self.all[cat][split_idx:]
+            self.all_imgs[mode].append((img_id, tuple(categories)))
+            self.all_imgs_ids[mode].append(img_id)
 
-    def set_params(self, images_per_instance=None, batch_size=None):
-        self.images_per_instance = images_per_instance or self.images_per_instance
+    def set_params(self, distractors=None, batch_size=None):
+        self.num_distractors = self.num_distractors if distractors is None else distractors
         self.batch_size = batch_size or self.batch_size
-        self.images_per_batch = self.images_per_instance * self.batch_size
-
-    def print_progress(self, generated, total):
-        print("\r[{0:5.2f}%]".format(float(generated) / float(total) * 100), end="")
 
     def get_images(self, return_captions=False, mode="train"):
         """
@@ -100,67 +90,55 @@ class Data_Handler:
         :param mode[str]: "train" or "val" for training or validation set
         :return: a list of images, optionally a list of captions
         """
-        data = self.train if mode[-5:] == "train" else self.val
-        generated = 0
-        total = 0
-        if self.group:
-            data_idx = {}
-            for cat in self.cat_ids:
-                np.random.shuffle(data[cat])
-                data_idx[cat] = len(data[cat]) - 1
-                total += len(data[cat])
-        else:
-            data_idx = 0
-            np.random.shuffle(data)
-            total += len(data)
+        mode = "train" if mode[-5:] == "train" else "val"
 
-        while self.group or data_idx + self.images_per_batch < len(data):
-            img_batches = np.zeros((self.images_per_instance, self.batch_size, 2048), dtype=np.float32)
+        data_idx = 0
+        np.random.shuffle(self.all_imgs[mode])
+
+        while data_idx + self.batch_size < len(self.all_imgs[mode]):
+            img_batches = np.zeros((1 + self.num_distractors, self.batch_size, 2048), dtype=np.float32)
             cap_batches = []
             for b in range(self.batch_size):
-                if self.group and self.images_per_instance > len(data_idx):
-                    self.print_progress(generated, total)
-                    return
-                elif self.group:
-                    cat_ids = np.random.choice(list(data_idx.keys()), replace=False, size=self.images_per_instance)
-
-                gen = enumerate(cat_ids) if self.group else range(self.images_per_instance)
-
-                captions = []
-                for i in gen:
-                    if self.group:
-                        i, cat = i
-                        img_id = data[cat][data_idx[cat]]
-                        data_idx[cat] -= 1
-                        if data_idx[cat] < 0:
-                            data_idx.pop(cat)
-                    else:
-                        img_id = data[data_idx]
-                        data_idx += 1
-
-                    if return_captions:
-                        img_captions = []
-                        ann_id = self.coco_capts.getAnnIds(imgIds=img_id)
-                        anns = self.coco_capts.loadAnns(ann_id)
-                        for a in anns:
-                            img_captions.append(a['caption'])
-                        captions.append(img_captions)
-
-                    img = self.coco.loadImgs(img_id)[0]
-                    with open('{}/images/{}/{}'.format(self.coco_path, self.feat_dir, img['file_name']), "rb") as f:
-                        img = pickle.load(f)
-
-                    img_batches[i, b] = img
+                img_id, categories = self.all_imgs[mode][data_idx]
+                data_idx += 1
 
                 if return_captions:
-                    cap_batches.append(captions)
+                    img_captions = []
+                    ann_id = self.coco_capts.getAnnIds(imgIds=img_id)
+                    anns = self.coco_capts.loadAnns(ann_id)
+                    for a in anns:
+                        img_captions.append(a['caption'])
+                    cap_batches.append(img_captions)
+
+                img = self.coco.loadImgs(img_id)[0]
+                with open('{}/images/{}/{}'.format(self.coco_path, self.feat_dir, img['file_name']), "rb") as f:
+                    img = pickle.load(f)
+
+                img_batches[0, b] = img
+
+                # Get distractors
+                if self.same_category:
+                    distractor_options = []
+                    if len(categories) == 0:
+                        distractor_options += self.distractors_cat[mode][-1]
+                    else:
+                        for category in categories:
+                            distractor_options += self.distractors_cat[mode][category]
+                else:
+                    distractor_options = self.all_imgs_ids[mode]
+
+                distractor_ids = np.random.choice(distractor_options, self.num_distractors, replace=False)
+                while img_id in distractor_ids:
+                    idx = np.where(distractor_ids == img_id)
+                    distractor_ids[idx] = np.random.choice(distractor_options, 1, replace=False)
+                distractor_imgs = self.coco.loadImgs(distractor_ids)
+                for i, d in enumerate(distractor_imgs):
+                    with open('{}/images/{}/{}'.format(self.coco_path, self.feat_dir, d['file_name']), "rb") as f:
+                        feats = pickle.load(f)
+                    img_batches[i + 1, b] = feats
 
             ret = (img_batches, cap_batches) if return_captions else img_batches
-            generated += self.images_per_batch
-            self.print_progress(generated, total)
             yield ret
-
-        self.print_progress(generated, total)
 
     def generate_all_encodings(self):
 
@@ -189,7 +167,6 @@ class Data_Handler:
         batch_img = []
 
         for img_id in img_list:
-            print(img_id)
             img = self.coco.loadImgs(img_id)[0]
             img_fn = img['file_name']
             img_path = '{}/images/{}/{}'.format(self.coco_path, self.data_dir, img_fn)
@@ -209,16 +186,10 @@ class Data_Handler:
             img *= 2.
 
             img_feat = sess.run([img_feats], feed_dict={img_ph: img})
-            print(img_feat[0].shape)
-            print(img_feat[0][0][:20])
-            exit(0)
 
             batch_feat.append(img_feat)
             batch_img.append(img)
             if len(batch_img) >= 128:
-                print("-------")
-                print(np.mean(batch_img), np.std(batch_img))
-                print(np.mean(batch_feat), np.std(batch_feat))
                 batch_feat = []
                 batch_img = []
 

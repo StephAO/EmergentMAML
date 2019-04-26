@@ -4,7 +4,7 @@ import tensorflow_probability as tfp
 from .agent import Agent
 
 class SenderAgent(Agent):
-    rnn_cell = tf.nn.rnn_cell.LSTMCell(Agent.num_hidden)
+    rnn_cell = tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(Agent.num_hidden)
     # Unique fc rnn output layer
     output_to_input = None
     layers = []
