@@ -25,7 +25,7 @@ class Reptile(Task):
     """
     def __init__(self, data_handler, sender=True, receiver=True, image_captioner=True, image_selector=True, track_results=True):
         self.sess = Agent.sess
-        self.N = 1 # number of steps taken for each task - should be > 1
+        self.N = 10 # number of steps taken for each task - should be > 1
 
         self.S = SenderAgent()
         self.R = ReceiverAgent(*self.S.get_output())

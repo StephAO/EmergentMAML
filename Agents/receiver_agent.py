@@ -143,24 +143,29 @@ class ReceiverAgent(Agent):
         """
         Build optimizer for sender and receiver. They share a loss function, but have different weights to update on
         """
-        self.sender_train_op, self.receiver_train_op = [
-            tf.contrib.layers.optimize_loss(
-                loss=self.loss,
-                global_step=Agent.step,
-                learning_rate=Agent.lr,
-                optimizer="Adam",
-                # some gradient clipping stabilizes training in the beginning.
-                clip_gradients=Agent.gradient_clip,
-                # only update receiver agent weights
-                variables=v)
-            for v in [SenderAgent.get_all_weights(), ReceiverAgent.get_all_weights()]
-        ]
+        self.optimizers = {}
+        self.train_ops = {}
+        for i in range(2):
+            v = SenderAgent.get_all_weights() if i == 0 else ReceiverAgent.get_all_weights()
+            mode = "sender" if i == 0 else "receiver"
+
+            self.optimizers[mode] = tf.train.AdamOptimizer()
+            self.train_ops[mode] = tf.contrib.layers.optimize_loss(loss=self.loss,
+                                                                   global_step=Agent.step,
+                                                                   learning_rate=Agent.lr,
+                                                                   optimizer=self.optimizers[mode],
+                                                                   # some gradient clipping stabilizes training in the beginning.
+                                                                   clip_gradients=Agent.gradient_clip,
+                                                                   # only update receiver agent weights
+                                                                   variables=v)
+        ReceiverAgent.layers += list(self.optimizers["sender"].variables())
+        ReceiverAgent.layers += list(self.optimizers["receiver"].variables())
 
     def get_train_ops(self):
         """
         Returns bots sender and receiver training ops because sender's train_op is defined using the receiver's loss
         """
-        return [self.sender_train_op, self.receiver_train_op]
+        return [self.train_ops["sender"], self.train_ops["receiver"]]
 
     def get_output(self):
         return self.accuracy, self.loss, self.prediction

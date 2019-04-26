@@ -38,16 +38,18 @@ class ImageCaptioner(SenderAgent):
         self.accuracy = tf.reduce_mean(tf.cast(tf.equal(self.prediction, self.out_captions), tf.float32))
 
     def _build_optimizer(self):
+        self.optimizer = tf.train.AdamOptimizer()
         self.train_op = tf.contrib.layers.optimize_loss(
             loss=self.loss,
             global_step=Agent.step,
             learning_rate=self.lr,
-            optimizer="Adam",
+            optimizer=self.optimizer,
             # some gradient clipping stabilizes training in the beginning.
             clip_gradients=self.gradient_clip,
             # only update image captioner weights
             variables=ImageCaptioner.get_all_weights()
         )
+        ImageCaptioner.layers += list(self.optimizer.variables())
 
     def get_output(self):
         return self.accuracy, self.loss, self.prediction

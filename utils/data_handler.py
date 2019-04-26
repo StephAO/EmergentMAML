@@ -6,7 +6,7 @@ import pickle
 import tensorflow as tf
 
 # TODO: consider moving this to a better spot
-coco_path = '/h/stephaneao/cocoapi'
+coco_path =  '/h/stephaneao/cocoapi'
 project_path = '/h/stephaneao/EmergentMAML'
 
 class Data_Handler:

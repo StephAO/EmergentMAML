@@ -13,16 +13,18 @@ class ImageSelector(ReceiverAgent):
         super().__init__(message, Agent.L, **kwargs)
 
     def _build_optimizer(self):
+        self.optimizer = tf.train.AdamOptimizer()
         self.train_op = tf.contrib.layers.optimize_loss(
             loss=self.loss,
             global_step=Agent.step,
             learning_rate=self.lr,
-            optimizer="Adam",
+            optimizer=self.optimizer,
             # some gradient clipping stabilizes training in the beginning.
             clip_gradients=self.gradient_clip,
             # only update image selector weights
             variables=ImageSelector.get_all_weights()
         )
+        ImageSelector.layers += list(self.optimizer.variables())
 
     def get_train_ops(self):
         return [self.train_op]
