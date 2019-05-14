@@ -23,14 +23,14 @@ class Reptile(Task):
     """
     A meta-learning task that teaches an agent over a set of other tasks
     """
-    def __init__(self, data_handler, sender=True, receiver=True, image_captioner=True, image_selector=True, track_results=True):
+    def __init__(self, data_handler, load_key=None, sender=True, receiver=True, image_captioner=True, image_selector=True, track_results=True):
         self.sess = Agent.sess
         self.N = 4 # number of steps taken for each task - should be > 1
 
-        self.S = SenderAgent()
-        self.R = ReceiverAgent(*self.S.get_output())
-        self.IC = ImageCaptioner()
-        self.IS = ImageSelector()
+        self.S = SenderAgent(load_key=load_key)
+        self.R = ReceiverAgent(*self.S.get_output(), load_key=load_key)
+        self.IC = ImageCaptioner(load_key=load_key)
+        self.IS = ImageSelector(load_key=load_key)
 
         self.train_metrics = {}
         self.val_metrics = {}
@@ -73,7 +73,15 @@ class Reptile(Task):
         self.shared_states = {"shared_sender": self.sender_shared_state, "shared_receiver": self.receiver_shared_state}
         self.own_states = {"own_sender": self.sender_own_state, "own_receiver": self.receiver_own_state}
 
+        # Initialize TF
         variables_to_initialize = tf.global_variables()
+        if load_key is not None:
+            dont_initialize = []
+            if SenderAgent.loaded:
+                dont_initialize += SenderAgent.get_all_weights()
+            if ReceiverAgent.loaded:
+                dont_initialize += ReceiverAgent.get_all_weights()
+            variables_to_initialize = [v for v in tf.global_variables() if v not in dont_initialize]
         Agent.sess.run(tf.variables_initializer(variables_to_initialize))
 
         shared_average = []

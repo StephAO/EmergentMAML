@@ -55,7 +55,7 @@ def main(epochs=50, task="reptile", D=127, K=10000, L=15, loss_type='pairwise'):
             t = ImageSelection(is_, data_handler=dh, track_results=track_results)
             dh.set_params(distractors=D)
         elif task.lower() in ["r", "reptile"]:
-            t = Reptile(data_handler=dh, track_results=track_results)
+            t = Reptile(data_handler=dh, track_results=track_results, load_key=load_key)
         else:
             raise ValueError("Unknown task {}, select from ['referential_game', 'image_captioning']".format(task))
 
