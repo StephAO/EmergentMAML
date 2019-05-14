@@ -29,12 +29,12 @@ def save_models(exp_key):
     SenderAgent.save_model(exp_key)
     ReceiverAgent.save_model(exp_key)
 
-def main(epochs=50, task="reptile", D=127, K=10000, L=15, loss_type='pairwise'):
+def main(epochs=150, task="reptile", D=127, K=10000, L=15, loss_type='pairwise'):
     """
     Run epochs of games
     :return:
     """
-    load_key='aef2c361325541aaa793d4aa16d6d25e'
+    load_key=None
     track_results=True
 
     Agent.set_params(K=K, D=D, L=L, loss_type=loss_type, train=True)
@@ -99,6 +99,10 @@ def main(epochs=50, task="reptile", D=127, K=10000, L=15, loss_type='pairwise'):
                     print("Saving Model")
                     best_accuracy = val_accuracy
                     save_models(exp_key)
+            else:
+                print("Saving Model")
+                best_accuracy = val_accuracy
+                save_models(exp_key)
 
         Agent.sess.close()
 

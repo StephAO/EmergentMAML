@@ -23,7 +23,7 @@ class Reptile(Task):
     """
     A meta-learning task that teaches an agent over a set of other tasks
     """
-    def __init__(self, data_handler, load_key=None, sender=True, receiver=True, image_captioner=True, image_selector=True, track_results=True):
+    def __init__(self, data_handler, load_key=None, sender=True, receiver=True, image_captioner=True, image_selector=False, track_results=True):
         self.sess = Agent.sess
         self.N = 4 # number of steps taken for each task - should be > 1
 
