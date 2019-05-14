@@ -29,16 +29,16 @@ def save_models(exp_key):
     SenderAgent.save_model(exp_key)
     ReceiverAgent.save_model(exp_key)
 
-def main(epochs=100, task="reptile", D=31, K=10000, L=15, loss_type='pairwise'):
+def main(epochs=50, task="reptile", D=127, K=10000, L=15, loss_type='pairwise'):
     """
     Run epochs of games
     :return:
     """
-    load_key=None
+    load_key='aef2c361325541aaa793d4aa16d6d25e'
     track_results=True
 
     Agent.set_params(K=K, D=D, L=L, loss_type=loss_type, train=True)
-    dh = Data_Handler(batch_size=Agent.batch_size, same_category=True)
+    dh = Data_Handler(batch_size=Agent.batch_size, same_category=False)
 
     with tf.variable_scope("all", reuse=tf.AUTO_REUSE):
         # Set up Agents and Tasks
