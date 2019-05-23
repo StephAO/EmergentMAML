@@ -22,7 +22,7 @@ class SenderAgent(Agent):
     saver = None
     loaded = False
 
-    def __init__(self, load_key=None):
+    def __init__(self):
         # Setup rnn output to input layer and embedding if it hasn't already been done
         if SenderAgent.output_to_input is None:
             SenderAgent.output_to_input = tf.layers.Dense(Agent.K)
@@ -32,6 +32,8 @@ class SenderAgent(Agent):
             SenderAgent.shared_layers += [SenderAgent.embedding]
 
         super().__init__()
+
+    def all_agents_initialized(self, load_key=None):
         # Create saver
         SenderAgent.saver = SenderAgent.saver or tf.train.Saver(var_list=SenderAgent.get_all_weights())
         if load_key is not None:

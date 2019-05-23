@@ -15,7 +15,7 @@ class Data_Handler:
         self.num_distractors = num_distractors
         self.batch_size = batch_size
         self.coco_path = coco_path
-        self.feat_dir = 'new_train_feats'
+        self.feat_dir = 'new_train_feats'#new_train_feats
         self.data_dir = 'train2014'
         self.data_file = '{}/annotations/instances_{}.json'.format(self.coco_path, self.data_dir)
         self.caption_file = '{}/annotations/captions_{}.json'.format(self.coco_path, self.data_dir)

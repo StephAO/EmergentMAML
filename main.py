@@ -29,7 +29,7 @@ def save_models(exp_key):
     SenderAgent.save_model(exp_key)
     ReceiverAgent.save_model(exp_key)
 
-def main(epochs=150, task="reptile", D=127, K=10000, L=15, loss_type='pairwise'):
+def main(epochs=55, task="reptile", D=127, K=10000, L=15, loss_type='pairwise'):
     """
     Run epochs of games
     :return:
@@ -43,15 +43,19 @@ def main(epochs=150, task="reptile", D=127, K=10000, L=15, loss_type='pairwise')
     with tf.variable_scope("all", reuse=tf.AUTO_REUSE):
         # Set up Agents and Tasks
         if task.lower() in ["rg", "referential game", "referential_game", "referentialgame"]:
-            s = SenderAgent(load_key=load_key)
-            r = ReceiverAgent(*s.get_output(), load_key=load_key)
+            s = SenderAgent()
+            r = ReceiverAgent(*s.get_output())
+            s.all_agents_initialized(load_key)
+            r.all_agents_initialized(load_key)
             t = ReferentialGame(s, r, data_handler=dh, track_results=track_results)
             dh.set_params(distractors=D )
         elif task.lower() in ["ic", "image captioning", "image_captioning", "imagecaptioning"]:
-            ic = ImageCaptioner(load_key=load_key)
+            ic = ImageCaptioner()
+            ic.all_agents_initialized(load_key)
             t = ImageCaptioning(ic, data_handler=dh, track_results=track_results)
         elif task.lower() in ["is", "image selection", "image_selection", "imageselection"]:
-            is_ = ImageSelector(load_key=load_key)
+            is_ = ImageSelector()
+            is_.all_agents_initialized(load_key)
             t = ImageSelection(is_, data_handler=dh, track_results=track_results)
             dh.set_params(distractors=D)
         elif task.lower() in ["r", "reptile"]:

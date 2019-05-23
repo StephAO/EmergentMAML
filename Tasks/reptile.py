@@ -27,10 +27,13 @@ class Reptile(Task):
         self.sess = Agent.sess
         self.N = 4 # number of steps taken for each task - should be > 1
 
-        self.S = SenderAgent(load_key=load_key)
-        self.R = ReceiverAgent(*self.S.get_output(), load_key=load_key)
-        self.IC = ImageCaptioner(load_key=load_key)
-        self.IS = ImageSelector(load_key=load_key)
+        self.S = SenderAgent()
+        self.R = ReceiverAgent(*self.S.get_output())
+        self.IC = ImageCaptioner()
+        # self.IS = ImageSelector()
+
+        self.S.all_agents_initialized(load_key)
+        self.R.all_agents_initialized(load_key)
 
         self.train_metrics = {}
         self.val_metrics = {}
@@ -69,6 +72,8 @@ class Reptile(Task):
             if ImageCaptioner.loaded:
                 dont_initialize += ImageCaptioner.get_all_weights()
             variables_to_initialize = [v for v in tf.global_variables() if v not in dont_initialize]
+            # REMOVE LATER
+            variables_to_initialize += ImageCaptioner.optimizer.variables()
         Agent.sess.run(tf.variables_initializer(variables_to_initialize))
 
 

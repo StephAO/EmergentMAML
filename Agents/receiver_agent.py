@@ -28,7 +28,7 @@ class ReceiverAgent(Agent):
     saver = None
     loaded = False
 
-    def __init__(self, message, msg_len, load_key=None):
+    def __init__(self, message, msg_len):
         # Get embedding variable and add it to shared variables if this hasn't been done yet
         if ReceiverAgent.embedding is None:
             ReceiverAgent.embedding = tf.get_variable(name="map", shape=[Agent.K, Agent.emb_size])
@@ -38,6 +38,8 @@ class ReceiverAgent(Agent):
         self.message = tf.cast(message, tf.float32)
         self.msg_len = msg_len
         super().__init__()
+
+    def all_agents_initialized(self, load_key=None):
         # Create saver
         ReceiverAgent.saver = ReceiverAgent.saver or tf.train.Saver(var_list=ReceiverAgent.get_all_weights())
         if load_key is not None:
