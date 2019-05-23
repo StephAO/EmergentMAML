@@ -34,7 +34,7 @@ def main(epochs=150, task="reptile", D=127, K=10000, L=15, loss_type='pairwise')
     Run epochs of games
     :return:
     """
-    load_key=None
+    load_key="22e65a1cdc6a4011a83ef0256b66ac4d"
     track_results=True
 
     Agent.set_params(K=K, D=D, L=L, loss_type=loss_type, train=True)
@@ -101,7 +101,6 @@ def main(epochs=150, task="reptile", D=127, K=10000, L=15, loss_type='pairwise')
                     save_models(exp_key)
             else:
                 print("Saving Model")
-                best_accuracy = val_accuracy
                 save_models(exp_key)
 
         Agent.sess.close()

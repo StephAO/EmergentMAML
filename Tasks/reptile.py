@@ -58,6 +58,19 @@ class Reptile(Task):
             if sender:
                 self.T["Sender"] = lambda img, capts: self.rg.train_batch(img, mode="sender_train")
 
+        # Initialize TF
+        variables_to_initialize = tf.global_variables()
+        if load_key is not None:
+            dont_initialize = []
+            if SenderAgent.loaded:
+                dont_initialize += SenderAgent.get_all_weights()
+            if ReceiverAgent.loaded:
+                dont_initialize += ReceiverAgent.get_all_weights()
+            if ImageCaptioner.loaded:
+                dont_initialize += ImageCaptioner.get_all_weights()
+            variables_to_initialize = [v for v in tf.global_variables() if v not in dont_initialize]
+        Agent.sess.run(tf.variables_initializer(variables_to_initialize))
+
 
         self.sender_shared_state = VariableState(self.sess, SenderAgent.get_shared_weights())
         self.receiver_shared_state = VariableState(self.sess, ReceiverAgent.get_shared_weights())
@@ -72,17 +85,6 @@ class Reptile(Task):
 
         self.shared_states = {"shared_sender": self.sender_shared_state, "shared_receiver": self.receiver_shared_state}
         self.own_states = {"own_sender": self.sender_own_state, "own_receiver": self.receiver_own_state}
-
-        # Initialize TF
-        variables_to_initialize = tf.global_variables()
-        if load_key is not None:
-            dont_initialize = []
-            if SenderAgent.loaded:
-                dont_initialize += SenderAgent.get_all_weights()
-            if ReceiverAgent.loaded:
-                dont_initialize += ReceiverAgent.get_all_weights()
-            variables_to_initialize = [v for v in tf.global_variables() if v not in dont_initialize]
-        Agent.sess.run(tf.variables_initializer(variables_to_initialize))
 
         shared_average = []
         for k, v in self.shared_states.items():
@@ -140,7 +142,7 @@ class Reptile(Task):
                 new_shared = []
 
                 # For each task
-                for task in ["Image Captioner", "Image Selector", "Sender", "Receiver"]:
+                for task in ["Image Captioner", "Sender", "Receiver"]:
                     # parameter setup to not waste data
                     if task in ["Sender", "Receiver", "Image Selector"]:
                         self.dh.set_params(distractors=Agent.D)
@@ -187,7 +189,7 @@ class Reptile(Task):
              open("{}/data/csv_accuracy_{}.csv".format(project_path, self.experiment.get_key()), 'a') as csv_acc_file:
             losses = []
             accs = []
-            for task in ["Image Captioner", "Image Selector", "Sender", "Receiver"]:
+            for task in ["Image Captioner", "Sender", "Receiver"]:
                 losses.append(str(self.train_metrics[task + " Loss"]))
                 accs.append(str(self.train_metrics[task + " Accuracy"]))
 
