@@ -37,7 +37,7 @@ class Agent(object):
 
     # TRAINING PARAMETERS
     step = tf.train.get_or_create_global_step()
-    lr = 0.0005  # self._cyclicLR() #0.005
+    lr = 0.001  # self._cyclicLR() #0.005
     gradient_clip = 5.0
     # TODO define temperature better - maybe learnt temperature?
     temperature = 1.
@@ -130,6 +130,7 @@ class Agent(object):
     def load_model(cls, exp_name):
         try:
             checkpoint_path = '/'.join([Agent.data_dir, exp_name, cls.__name__, "checkpoint.ckpt"])
+            print(checkpoint_path)
             cls.saver.restore(Agent.sess, checkpoint_path)
             print("Loaded weights for {}".format(cls.__name__))
             cls.loaded = True
@@ -158,9 +159,9 @@ class Agent(object):
         # Build model
         self._build_input()
         self._build_output()
-        # if Agent.train:
-        self._build_losses()
-        self._build_optimizer()
+        if Agent.train:
+            self._build_losses()
+            self._build_optimizer()
 
     def _cyclicLR(self):
         """

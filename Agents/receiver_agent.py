@@ -181,5 +181,5 @@ class ReceiverAgent(Agent):
         """
         for i, c in enumerate(candidates):
             fd[self.candidates[i]] = c
-        # if Agent.train:
-        fd[self.target_indices] = target_idx
+        if Agent.train:
+            fd[self.target_indices] = target_idx

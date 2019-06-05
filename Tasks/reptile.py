@@ -25,7 +25,7 @@ class Reptile(Task):
     """
     def __init__(self, data_handler, load_key=None, sender=True, receiver=True, image_captioner=True, image_selector=False, track_results=True):
         self.sess = Agent.sess
-        self.N = 4 # number of steps taken for each task - should be > 1
+        self.N = 1 # number of steps taken for each task - should be > 1
 
         self.S = SenderAgent()
         self.R = ReceiverAgent(*self.S.get_output())
@@ -73,7 +73,7 @@ class Reptile(Task):
                 dont_initialize += ImageCaptioner.get_all_weights()
             variables_to_initialize = [v for v in tf.global_variables() if v not in dont_initialize]
             # REMOVE LATER
-            variables_to_initialize += ImageCaptioner.optimizer.variables()
+            #variables_to_initialize += ImageCaptioner.optimizer.variables()
         Agent.sess.run(tf.variables_initializer(variables_to_initialize))
 
 
@@ -172,8 +172,8 @@ class Reptile(Task):
                 self.experiment.set_step(self.step)
                 self.experiment.log_metrics(self.train_metrics)
                 # Average new variables
-                new_own = {k: interpolate_vars(old_own[k], average_vars(new_own[k]), 0.1) for k, s in self.own_states.items()}
-                new_shared = interpolate_vars(old_shared, average_vars(new_shared), 0.1)
+                new_own = {k: interpolate_vars(old_own[k], average_vars(new_own[k]), 0.2) for k, s in self.own_states.items()}
+                new_shared = interpolate_vars(old_shared, average_vars(new_shared), 0.2)
                 # Set variables to new variables
                 self.set_weights(new_own_weights=new_own, new_shared_weights=new_shared)
 

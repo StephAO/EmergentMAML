@@ -31,8 +31,8 @@ class Evaluator:
         
         # MSCOCO variables
         self.coco_path = coco_path
-        self.feat_dir = 'train_feats'
-        self.data_dir = 'train2014'
+        self.feat_dir = 'val_feats'
+        self.data_dir = 'val2014'
         self.data_file = '{}/annotations/instances_{}.json'.format(self.coco_path, self.data_dir)
         self.caption_file = '{}/annotations/captions_{}.json'.format(self.coco_path, self.data_dir)
         # initialize COCO api for image and instance annotations
@@ -152,11 +152,11 @@ class Evaluator:
         fd = {}
         target_indices = np.zeros(self.batch_size, dtype=np.int32)
         self.is_.fill_feed_dict(fd, orig_messages, candidates, target_indices)
-        probs, pred, acc = Agent.sess.run([self.is_.prob_dist, self.is_.prediction, self.is_.accuracy], feed_dict=fd)
+        probs, pred = Agent.sess.run([self.is_.prob_dist, self.is_.prediction], feed_dict=fd)
         orig_probs = probs[np.arange(self.batch_size),target_indices]
         orig_probs = orig_probs.reshape((Agent.batch_size, 1))
         accuracy = (Agent.batch_size - np.count_nonzero(pred)) / Agent.batch_size
-        print(accuracy, acc)
+        #print(accuracy, acc)
         for i in range(Agent.batch_size):
             if self.accuracies.get(categories[i], None) is None:
                 self.accuracies[categories[i]] = []
@@ -427,14 +427,17 @@ if __name__ == "__main__":
 
 
 
-    load_key = "7e989143b2d94b2ba262496c203f7836" #""9dfc5e42bae84c7689708e3631b3c630"
+    load_key = "5ef9fdc210d141fe95dccc83975738ec"
 
     Agent.set_params(K=10000, D=31, L=15, batch_size=128, train=False, loss_type='pairwise')
 
     with tf.variable_scope("all", reuse=tf.AUTO_REUSE):
-        ic = ImageCaptioner(load_key=load_key)
-        is_ = ImageSelector(load_key=load_key)
-        
+        ic = ImageCaptioner()
+        is_ = ImageSelector()
+       
+        ic.all_agents_initialized(load_key)
+        is_.all_agents_initialized(load_key)
+ 
         # Initialize TF
         variables_to_initialize = tf.global_variables()
         dont_initialize = ImageCaptioner.get_all_weights() + ImageSelector.get_all_weights()
