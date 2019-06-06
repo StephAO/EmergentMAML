@@ -15,8 +15,8 @@ class Data_Handler:
         self.num_distractors = num_distractors
         self.batch_size = batch_size
         self.coco_path = coco_path
-        self.feat_dir = 'val_feats'#new_train_feats
-        self.data_dir = 'val2014'
+        self.feat_dir = 'train_feats'#new_train_feats
+        self.data_dir = 'train2014'
         self.data_file = '{}/annotations/instances_{}.json'.format(self.coco_path, self.data_dir)
         self.caption_file = '{}/annotations/captions_{}.json'.format(self.coco_path, self.data_dir)
         # initialize COCO api for image and instance annotations
@@ -43,7 +43,7 @@ class Data_Handler:
         return params
 
     def split_train_val(self):
-        all_img_ids = self.coco.getImgIds()
+        all_img_ids = self.coco.getImgIds()[:1000]
         np.random.seed(12345)
         np.random.shuffle(all_img_ids)
         self.all_imgs = {"train": [], "val": []}
@@ -101,6 +101,7 @@ class Data_Handler:
             for b in range(self.batch_size):
                 img_id, categories = self.all_imgs[mode][data_idx]
                 data_idx += 1
+                print(data_idx)
 
                 if return_captions:
                     img_captions = []
@@ -201,8 +202,6 @@ class Data_Handler:
 
             count += 1
 
-
-        self.print_progress(count, len(img_list))
 
 if __name__ == "__main__":
     dh = Data_Handler()

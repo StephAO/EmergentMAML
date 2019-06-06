@@ -10,7 +10,7 @@ import nltk
 from tqdm import tqdm
 
 # TODO: consider moving this to a better spot
-from utils.data_handler import coco_path, project_path
+from utils.data_handler import Data_Handler
 from Agents import Agent, ImageCaptioner, ImageSelector
 from utils.BLEU import *
 
@@ -23,6 +23,7 @@ class Evaluator:
         self.batch_size = Agent.batch_size
         self.V = Agent.V
         self.L = Agent.L
+        self.dh = Data_Handler(batch_size=Agent.batch_size, same_category=False)
         # Word counters
         self.generated_word_counter = {}
         self.caption_word_counter = {}
@@ -30,15 +31,15 @@ class Evaluator:
         self.bleu_scores = {ngram: [] for ngram in [1,2,3,4] }
         
         # MSCOCO variables
-        self.coco_path = coco_path
-        self.feat_dir = 'val_feats'
-        self.data_dir = 'val2014'
-        self.data_file = '{}/annotations/instances_{}.json'.format(self.coco_path, self.data_dir)
-        self.caption_file = '{}/annotations/captions_{}.json'.format(self.coco_path, self.data_dir)
+        # self.coco_path = coco_path
+        # self.feat_dir = 'val_feats'
+        # self.data_dir = 'val2014'
+        # self.data_file = '{}/annotations/instances_{}.json'.format(self.coco_path, self.data_dir)
+        # self.caption_file = '{}/annotations/captions_{}.json'.format(self.coco_path, self.data_dir)
         # initialize COCO api for image and instance annotations
-        self.coco = COCO(self.data_file)
-        self.coco_capts = COCO(self.caption_file)
-        self.cats = self.coco.loadCats(self.coco.getCatIds())
+        # self.coco = COCO(self.data_file)
+        # self.coco_capts = COCO(self.caption_file)
+        # self.cats = self.coco.loadCats(self.coco.getCatIds())
 
     def run(self):
         """
@@ -49,12 +50,12 @@ class Evaluator:
         :param mode[str]: "train" or "val" for training or validation set
         :return: a list of images, optionally a list of captions
         """
-        img_ids = []
-        all_ids = self.coco.getImgIds()
-        for cat in self.cats:
-            cat_imgs = self.coco.getImgIds(catIds=cat["id"])
-            cat_name = [cat["name"]] * 200
-            img_ids.extend(zip(cat_imgs[:200], cat_name))
+        # img_ids = []
+        # all_ids = self.coco.getImgIds()
+        # for cat in self.cats:
+        #     cat_imgs = self.coco.getImgIds(catIds=cat["id"])
+        #     cat_name = [cat["name"]] * 200
+        #     img_ids.extend(zip(cat_imgs[:200], cat_name))
             # print("{} & {}".format(cat["name"], len(cat_imgs)))
 
         self.corpus_log_probability = 1.0
@@ -71,52 +72,28 @@ class Evaluator:
         #     cap_batches = []
         #     img_count = 0
         #     for img_id in cat_imgs:
+
+        self.dh.set_params(distractors=Agent.D)
+        image_gen = self.dh.get_images(return_captions=True, mode="train")
+
+
         img_count = 0
-        img_batches = np.zeros((self.batch_size, 2048), dtype=np.float32)
-        cap_batches = []
-        cat_names = []
-        for img_id, cat_name in tqdm(img_ids):
-            img = self.coco.loadImgs(img_id)[0]
 
-            with open('{}/images/{}/{}'.format(self.coco_path, self.feat_dir, img['file_name']), "rb") as f:
-                img = pickle.load(f)
 
-            img_batches[img_count] = img
+        while True:
+            try:
+                images, captions = next(image_gen)
 
-            img_captions = []
-            ann_id = self.coco_capts.getAnnIds(imgIds=img_id)
-            anns = self.coco_capts.loadAnns(ann_id)
-            for a in anns:
-                img_captions.append(self.get_useable_captions(a['caption']))
-            cap_batches.append(img_captions)
-            cat_names.append(cat_name)
+                predictions, probabilities = self.run_batch((images[0], captions))
+                self.update_count(captions, predicted=False)
+                self.update_count(np.expand_dims(predictions, axis=1), predicted=True)
 
-            img_count += 1
+                self._calculate_omission_score(images, predictions)
+                self._calculate_bleu_score(predictions, captions)
+                # self._update_corpus_probability(probabilities, captions)
 
-            if img_count >= self.batch_size:
-                predictions, probabilities = self.run_batch((img_batches, cap_batches))
-                self.update_count(cat_names, cap_batches, predicted=False)
-                self.update_count(cat_names, np.expand_dims(predictions, axis=1), predicted=True)
-
-                candidates = np.zeros((Agent.D + 1, Agent.batch_size, 2048))
-                candidates[0, :] = img_batches
-                distractor_ids = np.random.choice(all_ids, Agent.D * Agent.batch_size, replace=False)
-                print(distractor_ids)
-                distractor_imgs = self.coco.loadImgs(distractor_ids)
-                for d in range(Agent.D):
-                    for bs in range(Agent.batch_size):
-                        img = distractor_imgs[d * Agent.D + bs]
-                        with open('{}/images/{}/{}'.format(self.coco_path, self.feat_dir, img['file_name']), "rb") as f:
-                            feats = pickle.load(f)
-                            candidates[d + 1, bs] = feats
-
-                self._calculate_omission_score(candidates, predictions, cat_names)
-                self._calculate_bleu_score(predictions, cap_batches)
-                self._update_corpus_probability(probabilities, cap_batches)
-
-                img_count = 0
-                cap_batches = []
-                cat_names = []
+            except StopIteration:
+                break
 
     def _calculate_bleu_score(self, pred_ids, true_caps_ids):
         pred_toks = []
@@ -139,7 +116,7 @@ class Evaluator:
         for ngram, scores in self.bleu_scores.items():
             scores.append(BLEU.get_score(pred_toks, true_caps_toks, N=ngram))
     
-    def _calculate_omission_score(self, candidates, messages, categories):
+    def _calculate_omission_score(self, candidates, messages):
 
         messages = messages.astype(np.int32)
         
@@ -157,11 +134,11 @@ class Evaluator:
         orig_probs = orig_probs.reshape((Agent.batch_size, 1))
         accuracy = (Agent.batch_size - np.count_nonzero(pred)) / Agent.batch_size
         #print(accuracy, acc)
-        for i in range(Agent.batch_size):
-            if self.accuracies.get(categories[i], None) is None:
-                self.accuracies[categories[i]] = []
-            acc = 1 if pred[i] == 0 else 0
-            self.accuracies[categories[i]].append(acc)
+        # for i in range(Agent.batch_size):
+        #     if self.accuracies.get(categories[i], None) is None:
+        #         self.accuracies[categories[i]] = []
+        #     acc = 1 if pred[i] == 0 else 0
+        #     self.accuracies[categories[i]].append(acc)
         self.accuracy.append(accuracy)
         
         mod_probs = []
@@ -214,11 +191,11 @@ class Evaluator:
             sum += P[i] * np.log(P[i] / Q[i])
         return sum, P, Q, words
 
-    def write_distribution(self, d):
-        with open(project_path + "/data/distribution_{}.csv".format(d["name"]), "w+") as f:
-            f.write("word,P,Q,kl={}\n".format(d['kl']))
-            for i in range(len(d['Q'])):
-                f.write("{},{},{}\n".format(d['words'][i],d['P'][i], d['Q'][i]))
+    # def write_distribution(self, d):
+    #     with open(project_path + "/data/distribution_{}.csv".format(d["name"]), "w+") as f:
+    #         f.write("word,P,Q,kl={}\n".format(d['kl']))
+    #         for i in range(len(d['Q'])):
+    #             f.write("{},{},{}\n".format(d['words'][i],d['P'][i], d['Q'][i]))
 
 
     def get_KL_divergence(self):
@@ -228,27 +205,27 @@ class Evaluator:
         best = {'kl': 999999, 'P': None, 'Q': None, 'name': None, 'words': None}
         worst = {'kl': 0, 'P': None, 'Q': None, 'name': None, 'words': None}
 
-        for cat in self.cats:
-            kl, P, Q, words = self._KL_divergence(self.caption_word_counter[cat["name"]], self.generated_word_counter[cat["name"]])
-            per_category.append(kl)
-            if kl < best['kl']:
-                best['kl'] = kl
-                best['P'] = P
-                best['Q'] = Q
-                best['name'] = cat["name"]
-                best['words'] = words
-            if kl > worst['kl']:
-                worst['kl'] = kl
-                worst['P'] = P
-                worst['Q'] = Q
-                worst['name'] = cat["name"]
-                worst['words'] = words
+        # for cat in self.cats:
+        #     kl, P, Q, words = self._KL_divergence(self.caption_word_counter[cat["name"]], self.generated_word_counter[cat["name"]])
+        #     per_category.append(kl)
+        #     if kl < best['kl']:
+        #         best['kl'] = kl
+        #         best['P'] = P
+        #         best['Q'] = Q
+        #         best['name'] = cat["name"]
+        #         best['words'] = words
+        #     if kl > worst['kl']:
+        #         worst['kl'] = kl
+        #         worst['P'] = P
+        #         worst['Q'] = Q
+        #         worst['name'] = cat["name"]
+        #         worst['words'] = words
 
-        self.write_distribution(all)
-        self.write_distribution(best)
-        self.write_distribution(worst)
+        # self.write_distribution(all)
+        # self.write_distribution(best)
+        # self.write_distribution(worst)
 
-        return all_kl, np.mean(per_category), np.std(per_category)
+        return all_kl#, np.mean(per_category), np.std(per_category)
 
     def beam_search(self, images, captions, beam_width=3):
         # BEAM SEARCH
@@ -324,18 +301,18 @@ class Evaluator:
         tokens = tokens.lower().split()
         return self.V.tokens_to_ids(self.L, tokens)
 
-    def update_count(self, categories, caption_batches, predicted=True):
+    def update_count(self, caption_batches, predicted=True):
         word_counter = self.generated_word_counter if predicted else self.caption_word_counter
         # Over batches
         for i, captions in enumerate(caption_batches):
-            category = categories[i]
+            # category = categories[i]
             # Over possible captions
             for caption in captions:
                 # Tokens in captions
                 for tok_id in caption:
                     tok = self.V.get_token(tok_id)
-                    word_counter[category] = word_counter.get(category, {})
-                    word_counter[category][tok] = word_counter[category].get(tok, 0) + 1
+                    # word_counter[category] = word_counter.get(category, {})
+                    # word_counter[category][tok] = word_counter[category].get(tok, 0) + 1
                     word_counter["all"] = word_counter.get("all", {})
                     word_counter["all"][tok] = word_counter["all"].get(tok, 0) + 1
                     if tok_id == self.V.eos_id:
@@ -427,9 +404,9 @@ if __name__ == "__main__":
 
 
 
-    load_key = "5ef9fdc210d141fe95dccc83975738ec"
+    load_key = "8cf8c8b35484461fafb92252af469313"
 
-    Agent.set_params(K=10000, D=31, L=15, batch_size=128, train=False, loss_type='pairwise')
+    Agent.set_params(K=10000, D=127, L=15, batch_size=128, train=False, loss_type='pairwise')
 
     with tf.variable_scope("all", reuse=tf.AUTO_REUSE):
         ic = ImageCaptioner()
